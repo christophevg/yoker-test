@@ -7,3 +7,5 @@ MODEL ?= glm-5.2:cloud
 
 run:
 	$(YOKER_TEST) --model $(MODEL) 2>&1
+
+
