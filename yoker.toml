@@ -1,3 +1,9 @@
+[permissions]
+filesystem_paths = [".", "../yoker"]
+
+[context]
+storage_path = "./local/context"
+
 [agents.directories]
 c3 = "../c3/agents"
 
@@ -13,8 +19,15 @@ enabled = true
 [tools.make.allowed_env_vars]
 run = [ "MODEL" ]
 
-[context]
-storage_path = "./local/context"
+[tools.git]
+enabled = true
+auto_permission = ["status", "log", "diff", "branch", "show", "commit", "add", "checkout"]
 
-[permissions]
-filesystem_paths = [".", "../yoker"]
+[tools.github]
+allowed_operations = [
+  "repo_view", "issue_list", "issue_view", "pr_list", "pr_view",
+  "pr_reviews", "pr_comments",
+  "workflow_list", "workflow_view", "workflow_logs",
+  "release_list", "release_view",
+  "pr_create", "pr_comment", "pr_ready", "release_create"
+]
