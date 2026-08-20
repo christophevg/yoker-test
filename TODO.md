@@ -4,12 +4,12 @@
 
 Each task: extract from `__main__.py` → create submodule → add unit tests → commit.
 
-- [ ] P1.1 **schema.py** — Extract `TestTask`, `TestResult` dataclasses. Test construction, defaults, field types.
-- [ ] P1.2 **scorers.py** — Extract `mcq_scorer` + `SCORERS` registry. Test each extraction fallback path, correct/incorrect/edge cases.
-- [ ] P1.3 **usage.py** — Extract `fetch_ollama_usage`. Test API response parsing with mocked httpx, missing config, error handling.
-- [ ] P1.4 **runner.py** — Extract `StatsCollector` + `run_single_test`. Test stats collection from events, token normalization, latency fallback, error handling.
-- [ ] P1.5 **report.py** — Extract `compute_composite` + report formatting. Test composite formula with various inputs (free, cheap, expensive, zero-quality), test report output.
-- [ ] P1.6 **cli.py** — Extract `main`/`async_main` (argparse, orchestration, output). `__main__.py` becomes thin entry point. Test argument parsing, orchestration flow.
+- [x] P1.1 **schema.py** — Extract `TestTask`, `TestResult` dataclasses. Test construction, defaults, field types.
+- [x] P1.2 **scorers.py** — Extract `mcq_scorer` + `SCORERS` registry. Test each extraction fallback path, correct/incorrect/edge cases.
+- [x] P1.3 **usage.py** — Extract `fetch_ollama_usage`. Test API response parsing with mocked httpx, missing config, error handling.
+- [x] P1.4 **runner.py** — Extract `StatsCollector` + `run_single_test`. Test stats collection from events, token normalization, latency fallback, error handling.
+- [x] P1.5 **report.py** — Extract `compute_composite` + report formatting. Test composite formula with various inputs (free, cheap, expensive, zero-quality), test report output.
+- [x] P1.6 **cli.py** — Extract `main`/`async_main` (argparse, orchestration, output). `__main__.py` becomes thin entry point. Test argument parsing, orchestration flow.
 
 ## Phase 2: Extend submodules to full envisaged form
 
