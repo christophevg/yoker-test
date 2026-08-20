@@ -70,7 +70,7 @@ with `enabled = true` and a configured backend (provider, model, API key).
 - Line length: 100
 - Ruff for formatting and linting
 - Mypy for type checking
-- Conventional commits with attribution: `🤖 Implemented together with a coding agent.`
+- Conventional commits with attribution: `🤖 Implemented together with Yoker.`
 
 ## Workflow
 
