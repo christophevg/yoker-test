@@ -27,6 +27,7 @@ keywords = ["yoker", "agent", "llm", "eval", "testing", "benchmark"]
 dependencies = [
   "yoker>=0.10.1",
   "httpx>=0.25.0",
+  "pyyaml>=6.0",
 ]
 
 [project.scripts]
@@ -39,6 +40,7 @@ dev = [
   "pytest-mock>=3.10.0",
   "mypy>=1.13.0",
   "ruff>=0.8.0",
+  "types-PyYAML>=6.0",
 ]
 
 [tool.hatch.build.targets.sdist]
@@ -94,3 +96,4 @@ indent-style = "space"
 
 [tool.uv.sources]
 yoker = { path = "../yoker", editable = true }
+

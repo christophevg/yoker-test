@@ -1,10 +1,10 @@
 """Runner for yoker-test: execute test tasks through Yoker and collect metrics."""
 
 import time
-from typing import Any
+from typing import Any, cast
 
 import yoker
-from yoker.events import Event, EventType, TurnEndEvent
+from yoker.events import Event, EventCallback, EventType, TurnEndEvent
 
 from yoker_test.schema import TestResult, TestTask
 from yoker_test.scorers import SCORERS
@@ -47,17 +47,16 @@ async def run_single_test(task: TestTask, config: Any) -> TestResult:
     tools=None,
     system_prompt=None,
     console_logging=False,
-    event_handler=collector,
+    event_handler=cast(EventCallback, collector),
   )
 
   t0 = time.monotonic()
+  error: str | None = None
   try:
     response = await agent.process(task.prompt)
   except Exception as exc:
     response = ""
     error = str(exc)
-  else:
-    error = None
   wall_ms = (time.monotonic() - t0) * 1000
 
   # Normalize tokens: prefer OpenAI/Anthropic fields, fall back to Ollama
@@ -70,7 +69,10 @@ async def run_single_test(task: TestTask, config: Any) -> TestResult:
   # Score
   score, extracted = (0.0, None)
   if error is None:
-    scorer = SCORERS[task.scorer]
+    if callable(task.scorer):
+      scorer = task.scorer
+    else:
+      scorer = SCORERS[task.scorer]
     score, extracted = scorer(task, response)
 
   return TestResult(
