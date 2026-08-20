@@ -8,4 +8,8 @@ MODEL ?= glm-5.2:cloud
 run:
 	$(YOKER_TEST) --model $(MODEL) 2>&1
 
-
+size:
+	@echo "src/"
+	@find src/ | grep "\.py$$" | xargs wc -l | sort -rn | head -10
+	@echo "tests/"
+	@find tests/ | grep "\.py$$" | xargs wc -l | sort -rn | head -10

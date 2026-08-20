@@ -15,3 +15,6 @@ run = [ "MODEL" ]
 
 [context]
 storage_path = "./local/context"
+
+[permissions]
+filesystem_paths = [".", "../yoker"]
