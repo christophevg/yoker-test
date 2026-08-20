@@ -9,21 +9,6 @@
 
 ### Phase 2: Extend submodules to full envisaged form
 
-#### P2.1: Extend schema.py with full data structures
-
-- [ ] **P2.1: Add extended dataclasses to schema.py**
-  - Extend `TestTask`: add `difficulty: str`, `system_prompt: str | None = None`; change `expected` to `Any`, `scorer` to `str | Callable`
-  - Add `Score` dataclass: `value: float`, `extracted: str | None = None`, `sub_scores: dict[str, float] | None = None`, `explanation: str | None = None`
-  - Extend `TestResult`: add `difficulty: str`, `repeat: int`, `prompt: str`, `messages: list[dict]`, `ttft_ms: float | None`, `scorer_name: str`, `sub_scores: dict[str, float] | None`; make `tokens_in`/`tokens_out` nullable (`int | None`)
-  - Add `RunMetadata` dataclass: `suite: str`, `suite_version: str`, `model: str`, `provider: str`, `yoker_version: str`, `temperature: float`, `seed: int`, `repeats: int`, `timestamp: str`
-  - Add `SuiteConfig` dataclass: `suite: str`, `version: str`, `description: str`, `repeats: int = 3`, `temperature: float = 0.0`, `seed: int = 42`, `max_tokens: int | None = None`, `tasks: list[TestTask]`, `task_generator: Callable | None = None`, `generator_config: dict | None = None`, `aggregation_weights: dict[str, float] | None = None`
-  - Add `CategorySummary` dataclass: `score: float`, `std: float`, `n_tasks: int`, `avg_tokens_in: float`, `avg_tokens_out: float`, `avg_latency_ms: float`, `total_tokens: int`, `total_latency_s: float`
-  - Add `OverallSummary` dataclass: `score: float`, `std: float`, `total_tokens_in: int`, `total_tokens_out: int`, `total_tokens: int`, `total_latency_s: float`, `avg_tokens_per_second: float`, `usage_delta: dict[str, float] | None` (Ollama session/weekly % delta — NOT token-based cost, which is deferred)
-  - Add `TestReport` dataclass: `run: RunMetadata`, `results: list[TestResult]`, `summary: dict[str, CategorySummary]`, `overall: OverallSummary`, `comparison: ComparisonReport | None = None`; with `to_yaml()`, `to_json()`, `to_dict()` methods
-  - Add `ComparisonReport` dataclass: `baseline: RunMetadata`, `delta: dict[str, float]`, `flagged: list[str]`
-  - **Satisfies**: FR1, FR3, FR6, FR7, FR8, FR11, FR13, FR14
-  - **Acceptance**: All new dataclasses construct correctly with required fields. Default values work. `TestReport.to_yaml()` produces valid YAML. `TestReport.to_json()` produces valid JSON. Existing tests still pass (with updated TestTask/TestResult field additions). New tests cover construction and defaults for each new dataclass. `OverallSummary` uses `usage_delta` (Ollama % delta) not token-based cost (deferred)
-
 #### P2.2: Add scorers and normalize utility
 
 - [ ] **P2.2: Implement additional scorers in scorers.py**
@@ -321,3 +306,18 @@
 - [x] **P1.4: runner.py** — Extract `StatsCollector` + `run_single_test`. Test stats collection from events, token normalization, latency fallback, error handling.
 - [x] **P1.5: report.py** — Extract `compute_composite` + report formatting. Test composite formula with various inputs (free, cheap, expensive, zero-quality), test report output.
 - [x] **P1.6: cli.py** — Extract `main`/`async_main` (argparse, orchestration, output). `__main__.py` becomes thin entry point. Test argument parsing, orchestration flow.
+
+### Phase 2: Extend submodules to full envisaged form
+
+- [x] **P2.1: Add extended dataclasses to schema.py** (2025-07-22)
+  - Extend `TestTask`: add `difficulty: str`, `system_prompt: str | None = None`; change `expected` to `Any`, `scorer` to `str | Callable`
+  - Add `Score` dataclass: `value: float`, `extracted: str | None = None`, `sub_scores: dict[str, float] | None = None`, `explanation: str | None = None`
+  - Extend `TestResult`: add `difficulty: str`, `repeat: int`, `prompt: str`, `messages: list[dict]`, `ttft_ms: float | None`, `scorer_name: str`, `sub_scores: dict[str, float] | None`; make `tokens_in`/`tokens_out` nullable (`int | None`)
+  - Add `RunMetadata` dataclass: `suite: str`, `suite_version: str`, `model: str`, `provider: str`, `yoker_version: str`, `temperature: float`, `seed: int`, `repeats: int`, `timestamp: str`
+  - Add `SuiteConfig` dataclass: `suite: str`, `version: str`, `description: str`, `repeats: int = 3`, `temperature: float = 0.0`, `seed: int = 42`, `max_tokens: int | None = None`, `tasks: list[TestTask]`, `task_generator: Callable | None = None`, `generator_config: dict | None = None`, `aggregation_weights: dict[str, float] | None = None`
+  - Add `CategorySummary` dataclass: `score: float`, `std: float`, `n_tasks: int`, `avg_tokens_in: float`, `avg_tokens_out: float`, `avg_latency_ms: float`, `total_tokens: int`, `total_latency_s: float`
+  - Add `OverallSummary` dataclass: `score: float`, `std: float`, `total_tokens_in: int`, `total_tokens_out: int`, `total_tokens: int`, `total_latency_s: float`, `avg_tokens_per_second: float`, `usage_delta: dict[str, float] | None` (Ollama session/weekly % delta — NOT token-based cost, which is deferred)
+  - Add `TestReport` dataclass: `run: RunMetadata`, `results: list[TestResult]`, `summary: dict[str, CategorySummary]`, `overall: OverallSummary`, `comparison: ComparisonReport | None = None`; with `to_yaml()`, `to_json()`, `to_dict()` methods
+  - Add `ComparisonReport` dataclass: `baseline: RunMetadata`, `delta: dict[str, float]`, `flagged: list[str]`
+  - **Satisfies**: FR1, FR3, FR6, FR7, FR8, FR11, FR13, FR14
+  - **Acceptance**: All new dataclasses construct correctly with required fields. Default values work. `TestReport.to_yaml()` produces valid YAML. `TestReport.to_json()` produces valid JSON. Existing tests still pass (with updated TestTask/TestResult field additions). New tests cover construction and defaults for each new dataclass. `OverallSummary` uses `usage_delta` (Ollama % delta) not token-based cost (deferred)
