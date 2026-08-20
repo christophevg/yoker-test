@@ -1,3 +1,12 @@
+[agents.directories]
+c3 = "../c3/agents"
+
+[skills]
+discovery = true
+
+[skills.directories]
+c3 = "../c3/skills"
+
 [tools.make]
 enabled = true
 
