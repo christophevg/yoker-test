@@ -1,0 +1,8 @@
+[tools.make]
+enabled = true
+
+[tools.make.allowed_env_vars]
+run = [ "MODEL" ]
+
+[context]
+storage_path = "./local/context"
