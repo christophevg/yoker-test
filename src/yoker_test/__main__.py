@@ -14,7 +14,6 @@ import re
 import sys
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -22,35 +21,10 @@ import yoker
 from yoker.config import get_yoker_config
 from yoker.events import Event, EventType, TurnEndEvent
 
-
-# ── Schema ───────────────────────────────────────────────────────────────
-
-@dataclass
-class TestTask:
-  id: str
-  category: str
-  prompt: str
-  expected: str
-  scorer: str
-  scorer_config: dict = field(default_factory=dict)
-
-
-@dataclass
-class TestResult:
-  task_id: str
-  category: str
-  score: float
-  response: str
-  extracted: str | None
-  tokens_in: int
-  tokens_out: int
-  latency_ms: float
-  thinking_chars: int = 0
-  content_chars: int = 0
-  error: str | None = None
-
+from yoker_test.schema import TestResult, TestTask
 
 # ── Scorers ──────────────────────────────────────────────────────────────
+
 
 def mcq_scorer(task: TestTask, response: str) -> tuple[float, str | None]:
   """Extract A-D from response, compare to expected. Returns (score, extracted)."""
@@ -88,6 +62,7 @@ SCORERS: dict[str, Callable[[TestTask, str], tuple[float, str | None]]] = {
 
 # ── Usage tracking ───────────────────────────────────────────────────────
 
+
 async def fetch_ollama_usage(config: Any) -> dict[str, float] | None:
   """Fetch current Ollama API usage percentages.
 
@@ -116,6 +91,7 @@ async def fetch_ollama_usage(config: Any) -> dict[str, float] | None:
 
 
 # ── Stats collection ─────────────────────────────────────────────────────
+
 
 class StatsCollector:
   """Captures stats and text from an agent's event stream.
@@ -146,6 +122,7 @@ class StatsCollector:
 
 
 # ── Runner ───────────────────────────────────────────────────────────────
+
 
 async def run_single_test(task: TestTask, config: Any) -> TestResult:
   """Execute one test task through Yoker, score it, return metrics."""
@@ -199,6 +176,7 @@ async def run_single_test(task: TestTask, config: Any) -> TestResult:
 
 # ── Composite score ──────────────────────────────────────────────────────
 
+
 def compute_composite(
   quality: float,
   cost_delta: float | None,
@@ -239,6 +217,7 @@ def compute_composite(
 
 
 # ── Main ─────────────────────────────────────────────────────────────────
+
 
 async def async_main(model: str) -> int:
   # One hardcoded MCQ task
