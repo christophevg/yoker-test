@@ -17,6 +17,7 @@ async def async_main(model: str) -> int:
   task = TestTask(
     id="K1",
     category="knowledge",
+    difficulty="easy",
     prompt=(
       "Question: What is the chemical symbol for gold?\n"
       "A) Gd\n"
