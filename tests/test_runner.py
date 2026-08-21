@@ -159,7 +159,7 @@ class TestRunSingleTest:
     assert result.category == "knowledge"
     assert result.score == 1.0
     assert result.response == "C"
-    assert result.extracted == "C"
+    assert result.extracted is None
     assert result.error is None
 
   async def test_incorrect_answer(self):
@@ -172,7 +172,7 @@ class TestRunSingleTest:
       result = await run_single_test(task, config=MagicMock())
 
     assert result.score == 0.0
-    assert result.extracted == "B"
+    assert result.extracted is None
 
   async def test_agent_error_returns_error_result(self):
     task = make_task(expected="C")
