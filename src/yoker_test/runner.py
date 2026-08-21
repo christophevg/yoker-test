@@ -7,7 +7,7 @@ import yoker
 from yoker.events import Event, EventCallback, EventType, TurnEndEvent
 
 from yoker_test.schema import TestResult, TestTask
-from yoker_test.scorers import SCORERS
+from yoker_test.scorers import SCORERS, normalize_score_result
 
 
 class StatsCollector:
@@ -67,13 +67,15 @@ async def run_single_test(task: TestTask, config: Any) -> TestResult:
   latency_ms = s.get("total_duration_ms") or wall_ms
 
   # Score
-  score, extracted = (0.0, None)
+  score: float = 0.0
+  extracted: str | None = None
+  sub_scores: dict[str, float] | None = None
   if error is None:
     if callable(task.scorer):
       scorer = task.scorer
     else:
       scorer = SCORERS[task.scorer]
-    score, extracted = scorer(task, response)
+    score, extracted, sub_scores = normalize_score_result(scorer(task, response))
 
   return TestResult(
     task_id=task.id,
@@ -87,4 +89,5 @@ async def run_single_test(task: TestTask, config: Any) -> TestResult:
     thinking_chars=collector.thinking_chars,
     content_chars=collector.content_chars,
     error=error,
+    sub_scores=sub_scores,
   )
