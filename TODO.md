@@ -9,23 +9,6 @@
 
 ### Phase 2: Extend submodules to full envisaged form
 
-#### P2.2: Add scorers and normalize utility
-
-- [ ] **P2.2: Implement additional scorers in scorers.py**
-  - Add `normalize_response(response: str) -> str` utility: strip markdown/LaTeX formatting per simple-evals implementation (remove `**`, `$\boxed{`, `}$`, `\$', `$\text{`, `$`, `\mathrm{`, `\{`, `\text`, `\(`, `\mathbf{`, `{`, `\boxed`)
-  - Add `exact_match(task, response) -> float | Score`: normalize both strings, compare; config: `ignore_case` (default: false), `ignore_punctuation` (default: false)
-  - Add `numeric_match(task, response) -> float | Score`: strip non-numeric except `.` and `-`, extract first number (`r'-?[\d.]+'`), compare with `tolerance` config (default: 0.0)
-  - Add `regex_extract(task, response) -> float | Score`: apply `pattern` from scorer_config, extract `group` (default: 1), compare to expected
-  - Add `contains(task, response) -> float | Score`: check if expected string appears in response; config: `ignore_case` (default: false)
-  - Add `json_valid(task, response) -> float | Score`: strip code fences, `json.loads()`, optionally check `required_keys` config
-  - Add `code_execution(task, response) -> float | Score`: extract code from fences (```python or ``` or raw), exec in sandbox with `timeout` config, run `test_cases` config, score = cases_passed / total
-  - Update `mcq_scorer` to 6-stage fallback: (1) exact A-D, (2) `Answer: B` pattern, (3) `\b[ABCD]\b` on first line, (4) `^([ABCD])` paren pattern, (5) first standalone A-D in response, (6) no match → 0
-  - Change scorer return type to `float | Score` (not `tuple[float, str | None]`)
-  - Register all scorers in `SCORERS` dict
-  - Consider dual-filter mode for `numeric_match` (strict + flexible extraction, see P2.14)
-  - **Satisfies**: FR2, FR17
-  - **Acceptance**: Each scorer returns `1.0` or `Score(value=1.0, ...)` for correct, `0.0` for incorrect, `0.0` for extraction failure. `code_execution` returns `Score` with `sub_scores` per test case. `normalize_response` tested with markdown/LaTeX patterns. All edge cases tested (empty response, missing config, malformed input). Existing MCQ tests updated for 6-stage fallback
-
 #### P2.3: Create suite loader module
 
 - [ ] **P2.3: Implement loader.py for suite YAML loading**
@@ -321,3 +304,17 @@
   - Add `ComparisonReport` dataclass: `baseline: RunMetadata`, `delta: dict[str, float]`, `flagged: list[str]`
   - **Satisfies**: FR1, FR3, FR6, FR7, FR8, FR11, FR13, FR14
   - **Acceptance**: All new dataclasses construct correctly with required fields. Default values work. `TestReport.to_yaml()` produces valid YAML. `TestReport.to_json()` produces valid JSON. Existing tests still pass (with updated TestTask/TestResult field additions). New tests cover construction and defaults for each new dataclass. `OverallSummary` uses `usage_delta` (Ollama % delta) not token-based cost (deferred)
+- [x] **P2.2: Implement additional scorers in scorers.py** (2025-07-23)
+  - Add `normalize_response(response: str) -> str` utility: strip markdown/LaTeX formatting per simple-evals implementation (remove `**`, `$\boxed{`, `}$`, `\$', `$\text{`, `$`, `\mathrm{`, `\{`, `\text`, `\(`, `\mathbf{`, `{`, `\boxed`)
+  - Add `exact_match(task, response) -> float | Score`: normalize both strings, compare; config: `ignore_case` (default: false), `ignore_punctuation` (default: false)
+  - Add `numeric_match(task, response) -> float | Score`: strip non-numeric except `.` and `-`, extract first number (`r'-?[\d.]+'`), compare with `tolerance` config (default: 0.0)
+  - Add `regex_extract(task, response) -> float | Score`: apply `pattern` from scorer_config, extract `group` (default: 1), compare to expected
+  - Add `contains(task, response) -> float | Score`: check if expected string appears in response; config: `ignore_case` (default: false)
+  - Add `json_valid(task, response) -> float | Score`: strip code fences, `json.loads()`, optionally check `required_keys` config
+  - Add `code_execution(task, response) -> float | Score`: extract code from fences (```python or ``` or raw), exec in sandbox with `timeout` config, run `test_cases` config, score = cases_passed / total
+  - Update `mcq_scorer` to 6-stage fallback: (1) exact A-D, (2) `Answer: B` pattern, (3) `\b[ABCD]\b` on first line, (4) `^([ABCD])` paren pattern, (5) first standalone A-D in response, (6) no match → 0
+  - Change scorer return type to `float | Score` (not `tuple[float, str | None]`)
+  - Register all scorers in `SCORERS` dict
+  - Consider dual-filter mode for `numeric_match` (strict + flexible extraction, see P2.14)
+  - **Satisfies**: FR2, FR17
+  - **Acceptance**: Each scorer returns `1.0` or `Score(value=1.0, ...)` for correct, `0.0` for incorrect, `0.0` for extraction failure. `code_execution` returns `Score` with `sub_scores` per test case. `normalize_response` tested with markdown/LaTeX patterns. All edge cases tested (empty response, missing config, malformed input). Existing MCQ tests updated for 6-stage fallback
