@@ -21,7 +21,9 @@ run = [ "MODEL" ]
 
 [tools.git]
 enabled = true
-auto_permission = ["status", "log", "diff", "branch", "show", "commit", "add", "checkout"]
+auto_permission = [
+  "status", "log", "diff", "branch", "show", "commit", "add", "checkout", "pull", "tag"
+]
 
 [tools.github]
 allowed_operations = [
