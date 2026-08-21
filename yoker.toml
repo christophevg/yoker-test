@@ -18,6 +18,8 @@ enabled = true
 
 [tools.make.allowed_env_vars]
 run = [ "MODEL" ]
+test = ["TEST"]
+lint = ["LINT_FLAGS", "LINT_CONFIG"]
 
 [tools.git]
 enabled = true
