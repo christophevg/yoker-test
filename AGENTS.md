@@ -1,7 +1,7 @@
 # AGENTS.md
 
 **IMPORTANT**
-When you encounter issues with missing permissions or missing tools, don't try to work around this, notify and ask for directions how to proceed. Most of the time, the owner will make a configuration change to enable access, or give instructions on how to proceed.
+When you encounter issues with permissions, missing tools or tools failing to do what you want, DON'T try to work around this, notify and ask for directions how to proceed. Most of the time, the owner will make a configuration change to enable access, perform the one-off command for you or give instructions on how to proceed.
 
 ## Project
 
