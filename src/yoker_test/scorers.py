@@ -2,9 +2,9 @@
 
 import json
 import re
-import signal
 import string
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 
 from yoker_test.schema import Score, TestTask
 
@@ -227,18 +227,10 @@ def _extract_code(response: str) -> str | None:
   return None
 
 
-class _TimeoutError(Exception):
-  pass
-
-
-def _timeout_handler(signum: int, frame: object) -> None:
-  raise _TimeoutError()
-
-
 def code_execution(task: TestTask, response: str) -> ScorerResult:
   """Execute extracted code against test cases.
 
-  Uses signal.alarm for timeout — Unix-only.
+  Uses ThreadPoolExecutor for cross-platform timeout support.
   """
   code = _extract_code(response)
   if not code:
@@ -256,11 +248,14 @@ def code_execution(task: TestTask, response: str) -> ScorerResult:
   for i, tc in enumerate(test_cases):
     key = f"case_{i}"
     try:
-      signal.signal(signal.SIGALRM, _timeout_handler)
-      signal.alarm(timeout)
       local_ns: dict = {}
-      exec(code, {"__builtins__": _RESTRICTED_BUILTINS}, local_ns)
-      signal.alarm(0)
+
+      def run_code(c: str = code, ns: dict = local_ns) -> None:
+        exec(c, {"__builtins__": _RESTRICTED_BUILTINS}, ns)
+
+      with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(run_code)
+        future.result(timeout=timeout)
 
       func_name = tc.get("func", "solution")
       func = local_ns.get(func_name)
@@ -278,8 +273,6 @@ def code_execution(task: TestTask, response: str) -> ScorerResult:
         results[key] = 0.0
     except Exception:
       results[key] = 0.0
-    finally:
-      signal.alarm(0)
 
   total = len(test_cases)
   value = passed / total if total > 0 else 0.0
