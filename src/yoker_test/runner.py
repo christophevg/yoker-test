@@ -50,14 +50,14 @@ async def run_single_test(task: TestTask, config: Any) -> TestResult:
     event_handler=cast(EventCallback, collector),
   )
 
-  t0 = time.monotonic()
+  t0 = time.perf_counter()
   error: str | None = None
   try:
     response = await agent.process(task.prompt)
   except Exception as exc:
     response = ""
     error = str(exc)
-  wall_ms = (time.monotonic() - t0) * 1000
+  wall_ms = (time.perf_counter() - t0) * 1000
 
   # Normalize tokens: prefer OpenAI/Anthropic fields, fall back to Ollama
   s = collector.stats
