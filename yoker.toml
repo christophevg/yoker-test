@@ -37,5 +37,5 @@ allowed_operations = [
   "release_create", "release_list", "release_view",
   "pr_list", "pr_view",
   "pr_reviews", "pr_comments",
-  "pr_create", "pr_comment", "pr_ready", "pre_edit"
+  "pr_create", "pr_comment", "pr_ready", "pr_edit"
 ]
