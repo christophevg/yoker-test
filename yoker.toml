@@ -29,9 +29,10 @@ auto_permission = [
 
 [tools.github]
 allowed_operations = [
-  "repo_view", "issue_list", "issue_view", "pr_list", "pr_view",
-  "pr_reviews", "pr_comments",
+  "repo_view", "issue_list", "issue_view",
   "workflow_list", "workflow_view", "workflow_logs",
-  "release_list", "release_view",
-  "pr_create", "pr_comment", "pr_ready", "release_create"
+  "release_create", "release_list", "release_view",
+  "pr_list", "pr_view",
+  "pr_reviews", "pr_comments",
+  "pr_create", "pr_comment", "pr_ready", "pre_edit"
 ]
