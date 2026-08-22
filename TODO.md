@@ -9,20 +9,6 @@
 
 ### Phase 2: Extend submodules to full envisaged form
 
-#### P2.3: Create suite loader module
-
-- [ ] **P2.3: Implement loader.py for suite YAML loading**
-  - Add `pyyaml` dependency to pyproject.toml
-  - Implement `load_suite(path: str | Path) -> SuiteConfig`: parse YAML, resolve `!function` tags to Python callables, generate dynamic tasks, return `SuiteConfig`
-  - Implement custom YAML constructor for `!function` tag: resolve `module.path.function` notation by importing module and getting attribute, call at load time, inject result
-  - Support `task_generator` field: if present, call with `generator_config` → get `list[TestTask]`
-  - Support `scorers` section: per-suite scorer config overrides
-  - Support `aggregation.weights`: category weighting
-  - Implement `validate_suite(config: SuiteConfig) -> list[str]`: check required fields present, all scorer names exist in `SCORERS` (or are callables), task IDs unique
-  - Return list of validation errors (empty = valid)
-  - **Satisfies**: FR3
-  - **Acceptance**: Loading a valid YAML suite returns `SuiteConfig` with all tasks expanded. `!function` tags resolve and call Python functions. `task_generator` produces tasks dynamically. Invalid suites produce specific validation error messages. Missing file raises `FileNotFoundError`. Malformed YAML raises parse error. Unresolvable `!function` fails with clear error at load time
-
 #### P2.4: Extend runner with EvalRunner class
 
 - [ ] **P2.4: Implement EvalRunner in runner.py**
@@ -318,3 +304,14 @@
   - Consider dual-filter mode for `numeric_match` (strict + flexible extraction, see P2.14)
   - **Satisfies**: FR2, FR17
   - **Acceptance**: Each scorer returns `1.0` or `Score(value=1.0, ...)` for correct, `0.0` for incorrect, `0.0` for extraction failure. `code_execution` returns `Score` with `sub_scores` per test case. `normalize_response` tested with markdown/LaTeX patterns. All edge cases tested (empty response, missing config, malformed input). Existing MCQ tests updated for 6-stage fallback
+- [x] **P2.3: Implement loader.py for suite YAML loading** (2026-08-22)
+  - Add `pyyaml` dependency to pyproject.toml
+  - Implement `load_suite(path: str | Path) -> SuiteConfig`: parse YAML, resolve `!function` tags to Python callables, generate dynamic tasks, return `SuiteConfig`
+  - Implement custom YAML constructor for `!function` tag: resolve `module.path.function` notation by importing module and getting attribute, call at load time, inject result
+  - Support `task_generator` field: if present, call with `generator_config` → get `list[TestTask]`
+  - Support `scorers` section: per-suite scorer config overrides
+  - Support `aggregation.weights`: category weighting
+  - Implement `validate_suite(config: SuiteConfig) -> list[str]`: check required fields present, all scorer names exist in `SCORERS` (or are callables), task IDs unique
+  - Return list of validation errors (empty = valid)
+  - **Satisfies**: FR3
+  - **Acceptance**: Loading a valid YAML suite returns `SuiteConfig` with all tasks expanded. `!function` tags resolve and call Python functions. `task_generator` produces tasks dynamically. Invalid suites produce specific validation error messages. Missing file raises `FileNotFoundError`. Malformed YAML raises parse error. Unresolvable `!function` fails with clear error at load time
