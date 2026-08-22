@@ -9,23 +9,6 @@
 
 ### Phase 2: Extend submodules to full envisaged form
 
-#### P2.4: Extend runner with EvalRunner class
-
-- [ ] **P2.4: Implement EvalRunner in runner.py**
-  - Add `EvalRunner` class: `__init__(self, tasks: list[TestTask], repeats: int = 3, temperature: float = 0.0, seed: int = 42)`, `async run(self, model: str, config: Any) -> TestReport`
-  - Execute all tasks × repeats through Yoker's SDK
-  - Support three execution paths: `yoker.process()` for standard tasks, `yoker.agent()` for tool-use tasks, `backend.chat_stream()` for direct backend access
-  - Collect per-repeat `TestResult` (with `repeat` index)
-  - Collect TTFT (time to first token) when streaming via `backend.chat_stream()`
-  - Aggregate per-repeat results: mean score, summed tokens, mean latency
-  - Handle per-task errors gracefully: record error, score 0.0, continue suite
-  - Detect model refusals (empty response, safety filter) — record as error with "refused" flag (see P2.12)
-  - Collect `RunMetadata` (suite, version, model, provider, yoker version, temperature, seed, repeats, timestamp)
-  - Assemble `TestReport` with all results, category summaries, overall summary
-  - Keep existing `StatsCollector` and `run_single_test` for backward compatibility
-  - **Satisfies**: FR4, FR5, FR13, FR16
-  - **Acceptance**: `EvalRunner.run()` executes all tasks × repeats, returns `TestReport`. Repeats produce per-repeat `TestResult` entries. Task errors don't abort the suite. All existing `run_single_test` tests still pass. New tests mock Yoker SDK and verify aggregation, error handling, repeat logic, RunMetadata collection
-
 #### P2.5: Extend report with aggregation and serialization
 
 - [ ] **P2.5: Implement report aggregation and serialization in report.py**
@@ -304,6 +287,20 @@
   - Consider dual-filter mode for `numeric_match` (strict + flexible extraction, see P2.14)
   - **Satisfies**: FR2, FR17
   - **Acceptance**: Each scorer returns `1.0` or `Score(value=1.0, ...)` for correct, `0.0` for incorrect, `0.0` for extraction failure. `code_execution` returns `Score` with `sub_scores` per test case. `normalize_response` tested with markdown/LaTeX patterns. All edge cases tested (empty response, missing config, malformed input). Existing MCQ tests updated for 6-stage fallback
+- [x] **P2.4: Implement EvalRunner in runner.py** (2025-07-24)
+  - Add `EvalRunner` class: `__init__(self, tasks: list[TestTask], repeats: int = 3, temperature: float = 0.0, seed: int = 42)`, `async run(self, model: str, config: Any) -> TestReport`
+  - Execute all tasks × repeats through Yoker's SDK
+  - Support three execution paths: `yoker.process()` for standard tasks, `yoker.agent()` for tool-use tasks, `backend.chat_stream()` for direct backend access
+  - Collect per-repeat `TestResult` (with `repeat` index)
+  - Collect TTFT (time to first token) when streaming via `backend.chat_stream()`
+  - Aggregate per-repeat results: mean score, summed tokens, mean latency
+  - Handle per-task errors gracefully: record error, score 0.0, continue suite
+  - Detect model refusals (empty response, safety filter) — record as error with "refused" flag (see P2.12)
+  - Collect `RunMetadata` (suite, version, model, provider, yoker version, temperature, seed, repeats, timestamp)
+  - Assemble `TestReport` with all results, category summaries, overall summary
+  - Keep existing `StatsCollector` and `run_single_test` for backward compatibility
+  - **Satisfies**: FR4, FR5, FR13, FR16
+  - **Acceptance**: `EvalRunner.run()` executes all tasks × repeats, returns `TestReport`. Repeats produce per-repeat `TestResult` entries. Task errors don't abort the suite. All existing `run_single_test` tests still pass. New tests mock Yoker SDK and verify aggregation, error handling, repeat logic, RunMetadata collection
 - [x] **P2.3: Implement loader.py for suite YAML loading** (2026-08-22)
   - Add `pyyaml` dependency to pyproject.toml
   - Implement `load_suite(path: str | Path) -> SuiteConfig`: parse YAML, resolve `!function` tags to Python callables, generate dynamic tasks, return `SuiteConfig`
