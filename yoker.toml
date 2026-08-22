@@ -24,7 +24,10 @@ lint = ["LINT_FLAGS", "LINT_CONFIG"]
 [tools.git]
 enabled = true
 auto_permission = [
-  "status", "log", "diff", "branch", "show", "commit", "add", "checkout", "pull", "tag"
+  "status", "log", "diff", "show",
+  "branch", "checkout", "pull", "rebase",
+  "tag",
+  "commit", "add"
 ]
 
 [tools.github]
