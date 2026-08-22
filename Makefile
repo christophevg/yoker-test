@@ -7,6 +7,7 @@ YOKER_FROM = ../yoker
 
 env-dev: ## Install all dependencies (dev + docs)
 	uv sync --all-extras
+	-uv pip install -e ../yoker
 
 env-run: ## Install runtime dependencies only
 	uv sync

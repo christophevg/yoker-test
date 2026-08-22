@@ -135,6 +135,3 @@ commands_pre = [
 ]
 commands = [["pytest", "tests", "-v", "--cov=yoker_test", "--cov-report=term-missing"]]
 
-[tool.uv.sources]
-yoker = { path = "../yoker", editable = true }
-
