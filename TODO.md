@@ -21,17 +21,6 @@
   - Moved to Deferred section. Not needed for the current primary goal
     (quality ranking of Ollama cloud models using usage % as cost factor).
 
-#### P2.8: Refactor CLI with subcommands
-
-- [ ] **P2.8: Implement full CLI with subcommands in cli.py**
-  - Refactor `main()` to use `argparse` subparsers: `eval`, `suites`, `show`
-  - `eval` subcommand: `--suite` (required), `--model` (default from suite), `--compare` (baseline path), `--output` (file path for YAML/JSON), `--repeats` (default: from suite config)
-  - `suites` subcommand: list available suites from `suites/` directory
-  - `show` subcommand: `--suite` (required), display suite contents (tasks, categories, baseline) without running
-  - `eval` flow: load suite → validate → create `EvalRunner` → run → generate `TestReport` → format console output → optionally serialize to file
-  - Keep backward compatibility: `yoker-test --model X` still works (redirects to `eval --suite yoker_basic`)
-  - **Satisfies**: FR9
-  - **Acceptance**: `yoker-test eval --suite yoker_basic --model glm-5.2:cloud` runs suite and prints report. `yoker-test suites` lists available suites. `yoker-test show --suite yoker_basic` displays suite contents. `--output results.yaml` writes serialized report. `--repeats 3` overrides suite default. Existing CLI tests updated for new interface
 
 #### P2.9: Create the yoker_basic suite
 
@@ -301,6 +290,15 @@
   - **Satisfies**: FR6, FR7, FR8, FR12, FR17
   - **Acceptance**: `aggregate_results` produces correct mean/std/efficiency metrics for sample data. `summarize_overall` computes weighted quality correctly, uses Ollama usage % as cost factor (not token-based pricing). `compare_baseline` produces correct deltas and flags regressions where `|delta| > 2 × std`. `format_console_report` outputs readable multi-task report. `format_quality_ranking` produces a model ranking table sorted by quality. `to_yaml()`/`to_json()` produce valid serialized output. Existing `compute_composite` and `print_report` tests still pass
 - [x] **P2.7: Implement config.py and public API in __init__.py** (2025-07-26)
+- [x] **P2.8: Implement full CLI with subcommands in cli.py** (2025-07-26)
+  - Refactor `main()` to use `argparse` subparsers: `eval`, `suites`, `show`
+  - `eval` subcommand: `--suite` (required), `--model` (default from suite), `--compare` (baseline path), `--output` (file path for YAML/JSON), `--repeats` (default: from suite config)
+  - `suites` subcommand: list available suites from `suites/` directory
+  - `show` subcommand: `--suite` (required), display suite contents (tasks, categories, baseline) without running
+  - `eval` flow: load suite → validate → create `EvalRunner` → run → generate `TestReport` → format console output → optionally serialize to file
+  - Keep backward compatibility: `yoker-test --model X` still works (redirects to `eval --suite yoker_basic`)
+  - **Satisfies**: FR9
+  - **Acceptance**: `yoker-test eval --suite yoker_basic --model glm-5.2:cloud` runs suite and prints report. `yoker-test suites` lists available suites. `yoker-test show --suite yoker_basic` displays suite contents. `--output results.yaml` writes serialized report. `--repeats 3` overrides suite default. Existing CLI tests updated for new interface
   - Create `config.py` with `TestConfig(yoker.Config)`: extends yoker Config for test-specific settings (suite, model, compare, output, repeats)
   - Update `__init__.py` to export public API: `evaluate`, `EvalRunner`, `TestTask`, `TestReport`, `Score`
   - Implement `async evaluate(suite: str, model: str, compare: str | None = None) -> TestReport`: load suite from YAML (by name or path), create `EvalRunner`, run, optionally compare baseline, return `TestReport`
