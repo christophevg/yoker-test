@@ -44,8 +44,10 @@ check: format-check test ## Run all quality checks and tests
 
 ## Running
 
+MODEL?=qwen3.5:cloud
+
 run: env-run ## Run yoker-test (usage: make run / optional: MODEL=gpt-4)
-	uv run yoker-test --model $(MODEL)
+	uv run --with-editable ${YOKER_FROM} yoker-test --model $(MODEL)
 
 ## Documentation
 
