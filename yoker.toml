@@ -1,5 +1,6 @@
 [permissions]
-filesystem_paths = [".", "../yoker"]
+filesystem_paths = [ ".", "../yoker", "../c3" ]
+blocked_write_paths = [ "../yoker" ]
 
 [context]
 storage_path = "./local/context"

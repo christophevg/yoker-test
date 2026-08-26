@@ -5,3 +5,4 @@ local/
 context/
 __pycache__/
 reporting/
+.coverage
