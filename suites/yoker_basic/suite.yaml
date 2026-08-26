@@ -1,0 +1,19 @@
+suite: yoker_basic
+version: "1.0"
+description: "Basic evaluation suite with the original MCQ gold-symbol task."
+repeats: 3
+temperature: 0.0
+seed: 42
+tasks:
+  - id: K1
+    category: knowledge
+    difficulty: easy
+    prompt: |
+      Question: What is the chemical symbol for gold?
+      A) Gd
+      B) Go
+      C) Au
+      D) Ag
+      Reply with only the letter of the correct answer.
+    expected: "C"
+    scorer: mcq
