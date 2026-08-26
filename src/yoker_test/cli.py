@@ -1,58 +1,156 @@
-"""CLI for yoker-test: argument parsing and test orchestration."""
+"""CLI for yoker-test: subcommands for suite-based model evaluation."""
 
 import argparse
 import asyncio
 import sys
+from pathlib import Path
 
-from yoker.config import get_yoker_config
-
-from yoker_test.report import print_report
-from yoker_test.runner import run_single_test
-from yoker_test.schema import TestTask
-from yoker_test.usage import fetch_ollama_usage
+from yoker_test.config import _resolve_suite_path, evaluate
+from yoker_test.loader import load_suite, validate_suite
+from yoker_test.report import format_console_report
 
 
-async def async_main(model: str) -> int:
-  """Run a single hardcoded MCQ task and print results."""
-  task = TestTask(
-    id="K1",
-    category="knowledge",
-    difficulty="easy",
-    prompt=(
-      "Question: What is the chemical symbol for gold?\n"
-      "A) Gd\n"
-      "B) Go\n"
-      "C) Au\n"
-      "D) Ag\n"
-      "Reply with only the letter of the correct answer."
-    ),
-    expected="C",
-    scorer="mcq",
+async def cmd_eval(
+  suite: str,
+  model: str,
+  compare: str | None,
+  output: str | None,
+  repeats: int | None,
+) -> int:
+  """Run an evaluation suite and print/save the report."""
+  try:
+    report = await evaluate(suite=suite, model=model, compare=compare, repeats=repeats)
+  except (FileNotFoundError, ValueError) as e:
+    print(f"Error: {e}", file=sys.stderr)
+    return 1
+
+  print(format_console_report(report))
+
+  if output is not None:
+    path = Path(output)
+    if path.suffix == ".json":
+      content = report.to_json()
+    else:
+      content = report.to_yaml()
+    path.write_text(content, encoding="utf-8")
+    print(f"\nReport saved to {output}")
+
+  return 0
+
+
+def cmd_suites() -> int:
+  """List available test suites in the suites/ directory."""
+  suites_dir = Path("suites")
+  if not suites_dir.is_dir():
+    print("No suites/ directory found.")
+    return 0
+
+  suite_dirs = sorted(
+    d for d in suites_dir.iterdir() if d.is_dir() and (d / "suite.yaml").is_file()
   )
+  if not suite_dirs:
+    print("No suites found in suites/ directory.")
+    return 0
 
-  config = get_yoker_config()
-  config.backend.config.model = model
-  config.backend.validate()
+  print(f"{'Suite':<20} {'Version':<10} {'Tasks':>6}  Description")
+  print("-" * 70)
+  for d in suite_dirs:
+    try:
+      config = load_suite(d / "suite.yaml")
+      print(f"{config.suite:<20} {config.version:<10} {len(config.tasks):>6}  {config.description}")
+    except Exception as e:
+      print(f"{d.name:<20} {'?':<10} {'?':>6}  Error: {e}")
 
-  usage_before = await fetch_ollama_usage(config)
+  return 0
 
-  print(f"yoker-test — model: {model}\n")
-  print(f"  Task:   {task.id} ({task.category})")
-  print(f"  Prompt: {task.prompt.splitlines()[0]}...")
+
+def cmd_show(suite: str) -> int:
+  """Display the contents of a test suite without running it."""
+  try:
+    suite_path = _resolve_suite_path(suite)
+    config = load_suite(suite_path)
+  except Exception as e:
+    print(f"Error: {e}", file=sys.stderr)
+    return 1
+
+  errors = validate_suite(config)
+  if errors:
+    print("Validation errors:", file=sys.stderr)
+    for err in errors:
+      print(f"  - {err}", file=sys.stderr)
+    return 1
+
+  print(f"Suite:        {config.suite}")
+  print(f"Version:      {config.version}")
+  print(f"Description:  {config.description}")
+  print(f"Repeats:      {config.repeats}")
+  print(f"Temperature:  {config.temperature}")
+  print(f"Seed:         {config.seed}")
+  if config.max_tokens is not None:
+    print(f"Max Tokens:   {config.max_tokens}")
   print()
 
-  result = await run_single_test(task, config)
+  by_category: dict[str, list] = {}
+  for task in config.tasks:
+    by_category.setdefault(task.category, []).append(task)
 
-  usage_after = await fetch_ollama_usage(config)
+  print("Tasks:")
+  for cat in sorted(by_category.keys()):
+    tasks = by_category[cat]
+    print(f"\n  [{cat}] ({len(tasks)} tasks)")
+    for task in tasks:
+      difficulty = f" ({task.difficulty})" if task.difficulty else ""
+      scorer = (
+        task.scorer if isinstance(task.scorer, str) else getattr(task.scorer, "__name__", "custom")
+      )
+      print(f"    {task.id:<10} {scorer:<12}{difficulty}")
 
-  print_report(task, result, usage_before, usage_after)
+  if config.aggregation_weights:
+    print("\nAggregation Weights:")
+    for cat, weight in config.aggregation_weights.items():
+      print(f"  {cat:<14} {weight:.2f}")
 
-  return 0 if result.error is None else 1
+  return 0
 
 
 def main() -> None:
-  """CLI entry point."""
+  """CLI entry point with subcommand support."""
   parser = argparse.ArgumentParser(description="yoker-test: model evaluation through Yoker")
-  parser.add_argument("--model", default="glm-5.2:cloud", help="Model to test")
+  parser.add_argument(
+    "--model",
+    default=None,
+    help="Model to test (backward compat: runs yoker_basic suite)",
+  )
+  subparsers = parser.add_subparsers(dest="command")
+
+  eval_parser = subparsers.add_parser("eval", help="Run an evaluation suite")
+  eval_parser.add_argument("--suite", required=True, help="Suite name or path to suite file")
+  eval_parser.add_argument("--model", default="glm-5.2:cloud", help="Model to evaluate")
+  eval_parser.add_argument(
+    "--compare", default=None, help="Baseline report file to compare against"
+  )
+  eval_parser.add_argument(
+    "--output", default=None, help="Output file (YAML or JSON based on extension)"
+  )
+  eval_parser.add_argument(
+    "--repeats", type=int, default=None, help="Override suite default repeats"
+  )
+
+  subparsers.add_parser("suites", help="List available test suites")
+
+  show_parser = subparsers.add_parser("show", help="Display suite contents without running")
+  show_parser.add_argument("--suite", required=True, help="Suite name or path to suite file")
+
   args = parser.parse_args()
-  sys.exit(asyncio.run(async_main(args.model)))
+
+  if args.command == "eval":
+    sys.exit(asyncio.run(cmd_eval(args.suite, args.model, args.compare, args.output, args.repeats)))
+  elif args.command == "suites":
+    sys.exit(cmd_suites())
+  elif args.command == "show":
+    sys.exit(cmd_show(args.suite))
+  elif args.model is not None:
+    sys.exit(asyncio.run(cmd_eval("yoker_basic", args.model, None, None, None)))
+  else:
+    parser.print_help()
+    sys.exit(1)
