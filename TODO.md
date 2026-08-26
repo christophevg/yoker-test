@@ -9,19 +9,6 @@
 
 ### Phase 2: Extend submodules to full envisaged form
 
-#### P2.5: Extend report with aggregation and serialization
-
-- [ ] **P2.5: Implement report aggregation and serialization in report.py**
-  - Add `aggregate_results(results: list[TestResult], weights: dict[str, float] | None) -> dict[str, CategorySummary]`: compute per-category score (mean), std, n_tasks, avg_tokens_in, avg_tokens_out, avg_latency_ms, total_tokens, total_latency_s
-  - Add `summarize_overall(results: list[TestResult], category_summaries: dict[str, CategorySummary], weights: dict[str, float] | None, usage_delta: dict[str, float] | None) -> OverallSummary`: compute weighted score, std, total_tokens_in/out, total_tokens, total_latency_s, avg_tokens_per_second; use Ollama usage delta (session/weekly %) as the cost factor — NOT token-based pricing (deferred)
-  - Add `compare_baseline(current: TestReport, baseline: TestReport) -> ComparisonReport`: compute per-category and overall deltas, flag where `|delta| > 2 × std`
-  - Add `format_console_report(report: TestReport) -> str`: format full multi-task report (per-task detail, category summaries, overall summary with quality ranking, optional comparison with regression flags)
-  - Add `format_quality_ranking(reports: list[TestReport]) -> str`: format a ranking table of all models sorted by quality, with usage % as cost factor — this is the primary deliverable
-  - Implement `TestReport.to_yaml()`, `TestReport.to_json()`, `TestReport.to_dict()` (can be in schema.py or report.py)
-  - Keep existing `compute_composite` and `print_report` for backward compatibility
-  - **Satisfies**: FR6, FR7, FR8, FR12, FR17
-  - **Acceptance**: `aggregate_results` produces correct mean/std/efficiency metrics for sample data. `summarize_overall` computes weighted quality correctly, uses Ollama usage % as cost factor (not token-based pricing). `compare_baseline` produces correct deltas and flags regressions where `|delta| > 2 × std`. `format_console_report` outputs readable multi-task report. `format_quality_ranking` produces a model ranking table sorted by quality. `to_yaml()`/`to_json()` produce valid serialized output. Existing `compute_composite` and `print_report` tests still pass
-
 #### P2.6: ~~Create pricing module~~ (DEFERRED — see Deferred section)
 
 > **Owner decision**: Defer token-based pricing computation. For now, the
@@ -312,3 +299,13 @@
   - Return list of validation errors (empty = valid)
   - **Satisfies**: FR3
   - **Acceptance**: Loading a valid YAML suite returns `SuiteConfig` with all tasks expanded. `!function` tags resolve and call Python functions. `task_generator` produces tasks dynamically. Invalid suites produce specific validation error messages. Missing file raises `FileNotFoundError`. Malformed YAML raises parse error. Unresolvable `!function` fails with clear error at load time
+- [x] **P2.5: Implement report aggregation and serialization in report.py** (2025-07-26)
+  - Add `aggregate_results(results: list[TestResult], weights: dict[str, float] | None) -> dict[str, CategorySummary]`: compute per-category score (mean), std, n_tasks, avg_tokens_in, avg_tokens_out, avg_latency_ms, total_tokens, total_latency_s
+  - Add `summarize_overall(results: list[TestResult], category_summaries: dict[str, CategorySummary], weights: dict[str, float] | None, usage_delta: dict[str, float] | None) -> OverallSummary`: compute weighted score, std, total_tokens_in/out, total_tokens, total_latency_s, avg_tokens_per_second; use Ollama usage delta (session/weekly %) as the cost factor — NOT token-based pricing (deferred)
+  - Add `compare_baseline(current: TestReport, baseline: TestReport) -> ComparisonReport`: compute per-category and overall deltas, flag where `|delta| > 2 × std`
+  - Add `format_console_report(report: TestReport) -> str`: format full multi-task report (per-task detail, category summaries, overall summary with quality ranking, optional comparison with regression flags)
+  - Add `format_quality_ranking(reports: list[TestReport]) -> str`: format a ranking table of all models sorted by quality, with usage % as cost factor — this is the primary deliverable
+  - Implement `TestReport.to_yaml()`, `TestReport.to_json()`, `TestReport.to_dict()` (can be in schema.py or report.py)
+  - Keep existing `compute_composite` and `print_report` for backward compatibility
+  - **Satisfies**: FR6, FR7, FR8, FR12, FR17
+  - **Acceptance**: `aggregate_results` produces correct mean/std/efficiency metrics for sample data. `summarize_overall` computes weighted quality correctly, uses Ollama usage % as cost factor (not token-based pricing). `compare_baseline` produces correct deltas and flags regressions where `|delta| > 2 × std`. `format_console_report` outputs readable multi-task report. `format_quality_ranking` produces a model ranking table sorted by quality. `to_yaml()`/`to_json()` produce valid serialized output. Existing `compute_composite` and `print_report` tests still pass
