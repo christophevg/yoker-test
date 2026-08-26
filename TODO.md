@@ -21,15 +21,6 @@
   - Moved to Deferred section. Not needed for the current primary goal
     (quality ranking of Ollama cloud models using usage % as cost factor).
 
-#### P2.7: Create config module and public API
-
-- [ ] **P2.7: Implement config.py and public API in __init__.py**
-  - Create `config.py` with `TestConfig(yoker.Config)`: extends yoker Config for test-specific settings (suite, model, compare, output, repeats)
-  - Update `__init__.py` to export public API: `evaluate`, `EvalRunner`, `TestTask`, `TestReport`, `Score`
-  - Implement `async evaluate(suite: str, model: str, compare: str | None = None) -> TestReport`: load suite from YAML (by name or path), create `EvalRunner`, run, optionally compare baseline, return `TestReport`
-  - **Satisfies**: FR11
-  - **Acceptance**: `from yoker_test import evaluate, EvalRunner, TestTask, TestReport, Score` works. `await evaluate(suite="yoker_basic", model="glm-5.2:cloud")` returns `TestReport`. `TestConfig` extends `yoker.Config` and is importable. Tests mock the runner and verify `evaluate()` orchestration
-
 #### P2.8: Refactor CLI with subcommands
 
 - [ ] **P2.8: Implement full CLI with subcommands in cli.py**
@@ -309,3 +300,9 @@
   - Keep existing `compute_composite` and `print_report` for backward compatibility
   - **Satisfies**: FR6, FR7, FR8, FR12, FR17
   - **Acceptance**: `aggregate_results` produces correct mean/std/efficiency metrics for sample data. `summarize_overall` computes weighted quality correctly, uses Ollama usage % as cost factor (not token-based pricing). `compare_baseline` produces correct deltas and flags regressions where `|delta| > 2 × std`. `format_console_report` outputs readable multi-task report. `format_quality_ranking` produces a model ranking table sorted by quality. `to_yaml()`/`to_json()` produce valid serialized output. Existing `compute_composite` and `print_report` tests still pass
+- [x] **P2.7: Implement config.py and public API in __init__.py** (2025-07-26)
+  - Create `config.py` with `TestConfig(yoker.Config)`: extends yoker Config for test-specific settings (suite, model, compare, output, repeats)
+  - Update `__init__.py` to export public API: `evaluate`, `EvalRunner`, `TestTask`, `TestReport`, `Score`
+  - Implement `async evaluate(suite: str, model: str, compare: str | None = None) -> TestReport`: load suite from YAML (by name or path), create `EvalRunner`, run, optionally compare baseline, return `TestReport`
+  - **Satisfies**: FR11
+  - **Acceptance**: `from yoker_test import evaluate, EvalRunner, TestTask, TestReport, Score` works. `await evaluate(suite="yoker_basic", model="glm-5.2:cloud")` returns `TestReport`. `TestConfig` extends `yoker.Config` and is importable. Tests mock the runner and verify `evaluate()` orchestration
