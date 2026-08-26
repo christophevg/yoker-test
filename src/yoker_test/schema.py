@@ -125,6 +125,12 @@ class ComparisonReport:
   flagged: list[str] = field(default_factory=list)
 
 
+def _filter_fields(cls: type, data: dict) -> dict:
+  """Filter dict to only fields that exist on the dataclass."""
+  fields = getattr(cls, "__dataclass_fields__", {})
+  return {k: v for k, v in data.items() if k in fields}
+
+
 @dataclass
 class TestReport:
   __test__ = False
@@ -134,6 +140,32 @@ class TestReport:
   summary: dict[str, CategorySummary] = field(default_factory=dict)
   overall: OverallSummary | None = None
   comparison: ComparisonReport | None = None
+
+  @classmethod
+  def from_dict(cls, data: dict) -> "TestReport":
+    """Reconstruct a TestReport from a plain dict (e.g., from YAML/JSON).
+
+    Handles extra/missing keys gracefully via _filter_fields for
+    forward/backward compatibility.
+    """
+    run = RunMetadata(**_filter_fields(RunMetadata, data["run"]))
+    results = [TestResult(**_filter_fields(TestResult, r)) for r in data.get("results", [])]
+    summary = {
+      cat: CategorySummary(**_filter_fields(CategorySummary, s))
+      for cat, s in data.get("summary", {}).items()
+    }
+    overall = None
+    if data.get("overall") is not None:
+      overall = OverallSummary(**_filter_fields(OverallSummary, data["overall"]))
+    comparison = None
+    if data.get("comparison") is not None:
+      comp_data = data["comparison"]
+      baseline = RunMetadata(**_filter_fields(RunMetadata, comp_data["baseline"]))
+      comp_fields = _filter_fields(
+        ComparisonReport, {k: v for k, v in comp_data.items() if k != "baseline"}
+      )
+      comparison = ComparisonReport(baseline=baseline, **comp_fields)
+    return cls(run=run, results=results, summary=summary, overall=overall, comparison=comparison)
 
   def to_dict(self) -> dict:
     """Recursively convert to a plain dict."""
