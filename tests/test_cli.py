@@ -115,7 +115,7 @@ class TestEvalSubcommandParsing:
       patch("sys.exit"),
     ):
       main()
-      mock_cmd.assert_called_once_with("my_suite", "glm-5.2:cloud", None, None, None)
+      mock_cmd.assert_called_once_with("my_suite", "glm-5.2:cloud", None, None, None, [])
 
 
 class TestSuitesSubcommandParsing:

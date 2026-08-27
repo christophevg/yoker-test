@@ -1,10 +1,13 @@
 """Scorers for yoker-test: score model responses against expected answers."""
 
 import json
+import os
 import re
 import string
+import subprocess
+import sys
+import tempfile
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
 
 from yoker_test.schema import Score, TestTask
 
@@ -177,42 +180,6 @@ def json_valid(task: TestTask, response: str) -> ScorerResult:
   return 1.0
 
 
-_RESTRICTED_BUILTINS = {
-  "print": print,
-  "len": len,
-  "range": range,
-  "int": int,
-  "float": float,
-  "str": str,
-  "list": list,
-  "dict": dict,
-  "tuple": tuple,
-  "set": set,
-  "bool": bool,
-  "abs": abs,
-  "min": min,
-  "max": max,
-  "sum": sum,
-  "sorted": sorted,
-  "enumerate": enumerate,
-  "zip": zip,
-  "map": map,
-  "filter": filter,
-  "round": round,
-  "isinstance": isinstance,
-  "type": type,
-  "True": True,
-  "False": False,
-  "None": None,
-  "Exception": Exception,
-  "ValueError": ValueError,
-  "TypeError": TypeError,
-  "IndexError": IndexError,
-  "KeyError": KeyError,
-  "ZeroDivisionError": ZeroDivisionError,
-}
-
-
 def _extract_code(response: str) -> str | None:
   """Extract Python code from markdown fences or raw response."""
   m = re.search(r"```python\s*\n(.*?)```", response, re.DOTALL)
@@ -228,9 +195,11 @@ def _extract_code(response: str) -> str | None:
 
 
 def code_execution(task: TestTask, response: str) -> ScorerResult:
-  """Execute extracted code against test cases.
+  """Execute extracted code against test cases in a subprocess.
 
-  Uses ThreadPoolExecutor for cross-platform timeout support.
+  Writes the LLM-generated code and test-case runner to a temp file,
+  executes it via subprocess with timeout, and parses JSON results from
+  stdout. OS-level isolation protects the host process.
   """
   code = _extract_code(response)
   if not code:
@@ -242,37 +211,71 @@ def code_execution(task: TestTask, response: str) -> ScorerResult:
 
   timeout = task.scorer_config.get("timeout", 5)
 
+  # Build runner script: define code into a namespace, run each test case, print JSON
+  runner_lines = [
+    "import json, sys",
+    "results = {}",
+    "_ns = {}",
+    "try:",
+    f"    exec({code!r}, _ns)",
+    "except Exception as e:",
+    f"    for i in range({len(test_cases)}):",
+    "        results[f'case_{i}'] = {'score': 0.0, 'error': str(e)}",
+    "    print(json.dumps(results))",
+    "    sys.exit(0)",
+  ]
+  for i, tc in enumerate(test_cases):
+    func_name = tc.get("func", "solution")
+    args = tc.get("args", [])
+    expected = tc.get("expected")
+    runner_lines.extend(
+      [
+        "try:",
+        f"    _func = _ns.get({func_name!r})",
+        "    if _func is None or not callable(_func):",
+        f"        results['case_{i}'] = {{'score': 0.0}}",
+        "    else:",
+        f"        _result = _func(*{args!r})",
+        f"        results['case_{i}'] = {{'score': 1.0 if _result == {expected!r} else 0.0}}",
+        "except Exception as e:",
+        f"    results['case_{i}'] = {{'score': 0.0, 'error': str(e)}}",
+      ]
+    )
+  runner_lines.append("print(json.dumps(results))")
+  runner = "\n".join(runner_lines) + "\n"
+
+  with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as f:
+    f.write(runner)
+    tmp_path = f.name
+
+  try:
+    result = subprocess.run(
+      [sys.executable, tmp_path],
+      capture_output=True,
+      timeout=timeout,
+      text=True,
+    )
+    try:
+      parsed = json.loads(result.stdout)
+    except json.JSONDecodeError:
+      parsed = {f"case_{i}": 0.0 for i in range(len(test_cases))}
+  except subprocess.TimeoutExpired:
+    parsed = {f"case_{i}": 0.0 for i in range(len(test_cases))}
+  finally:
+    os.unlink(tmp_path)
+
   results: dict[str, float] = {}
   passed = 0
-
-  for i, tc in enumerate(test_cases):
+  for i in range(len(test_cases)):
     key = f"case_{i}"
-    try:
-      local_ns: dict = {}
-
-      def run_code(c: str = code, ns: dict = local_ns) -> None:
-        exec(c, {"__builtins__": _RESTRICTED_BUILTINS}, ns)
-
-      with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(run_code)
-        future.result(timeout=timeout)
-
-      func_name = tc.get("func", "solution")
-      func = local_ns.get(func_name)
-      if func is None or not callable(func):
-        results[key] = 0.0
-        continue
-
-      args = tc.get("args", [])
-      expected = tc.get("expected")
-      actual = func(*args)
-      if actual == expected:
-        results[key] = 1.0
-        passed += 1
-      else:
-        results[key] = 0.0
-    except Exception:
-      results[key] = 0.0
+    case_result = parsed.get(key, 0.0)
+    if isinstance(case_result, dict):
+      score_val = case_result.get("score", 0.0)
+    else:
+      score_val = case_result
+    results[key] = score_val
+    if score_val == 1.0:
+      passed += 1
 
   total = len(test_cases)
   value = passed / total if total > 0 else 0.0
