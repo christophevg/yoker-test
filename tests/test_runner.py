@@ -143,14 +143,24 @@ def make_task(expected: str = "C") -> TestTask:
   return TestTask(id="K1", category="knowledge", prompt="?", expected=expected, scorer="mcq")
 
 
+def make_mock_agent(process_return: str = "C", process_side_effect=None) -> MagicMock:
+  """Create a mock agent with async process() and aclose() methods."""
+  agent = MagicMock()
+  if process_side_effect is not None:
+    agent.process = AsyncMock(side_effect=process_side_effect)
+  else:
+    agent.process = AsyncMock(return_value=process_return)
+  agent.aclose = AsyncMock()
+  return agent
+
+
 class TestRunSingleTest:
   """Tests for run_single_test."""
 
   async def test_successful_run(self):
     task = make_task(expected="C")
 
-    mock_agent = MagicMock()
-    mock_agent.process = AsyncMock(return_value="C")
+    mock_agent = make_mock_agent("C")
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
       result = await run_single_test(task, config=MagicMock())
@@ -165,8 +175,7 @@ class TestRunSingleTest:
   async def test_incorrect_answer(self):
     task = make_task(expected="C")
 
-    mock_agent = MagicMock()
-    mock_agent.process = AsyncMock(return_value="B")
+    mock_agent = make_mock_agent("B")
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
       result = await run_single_test(task, config=MagicMock())
@@ -177,8 +186,7 @@ class TestRunSingleTest:
   async def test_agent_error_returns_error_result(self):
     task = make_task(expected="C")
 
-    mock_agent = MagicMock()
-    mock_agent.process = AsyncMock(side_effect=RuntimeError("Connection failed"))
+    mock_agent = make_mock_agent(process_side_effect=RuntimeError("Connection failed"))
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
       result = await run_single_test(task, config=MagicMock())
@@ -192,8 +200,7 @@ class TestRunSingleTest:
     """When input_tokens/output_tokens are set, those are used."""
     task = make_task()
 
-    mock_agent = MagicMock()
-    mock_agent.process = AsyncMock(return_value="C")
+    mock_agent = make_mock_agent("C")
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
       with patch("yoker_test.runner.StatsCollector") as mock_collector_cls:
@@ -219,8 +226,7 @@ class TestRunSingleTest:
     """When input_tokens/output_tokens are 0, fall back to prompt_eval_count/eval_count."""
     task = make_task()
 
-    mock_agent = MagicMock()
-    mock_agent.process = AsyncMock(return_value="C")
+    mock_agent = make_mock_agent("C")
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
       with patch("yoker_test.runner.StatsCollector") as mock_collector_cls:
@@ -245,8 +251,7 @@ class TestRunSingleTest:
     """When total_duration_ms is 0, latency falls back to wall-clock time."""
     task = make_task()
 
-    mock_agent = MagicMock()
-    mock_agent.process = AsyncMock(return_value="C")
+    mock_agent = make_mock_agent("C")
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
       with patch("yoker_test.runner.StatsCollector") as mock_collector_cls:
@@ -270,8 +275,7 @@ class TestRunSingleTest:
   async def test_response_is_stripped(self):
     task = make_task(expected="C")
 
-    mock_agent = MagicMock()
-    mock_agent.process = AsyncMock(return_value="  C  \n")
+    mock_agent = make_mock_agent("  C  \n")
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
       result = await run_single_test(task, config=MagicMock())
@@ -421,8 +425,7 @@ class TestEvalRunnerRun:
     task = make_task(expected="C")
     runner = EvalRunner(tasks=[task], repeats=1)
 
-    mock_agent = MagicMock()
-    mock_agent.process = AsyncMock(return_value="C")
+    mock_agent = make_mock_agent("C")
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
       report = await runner.run("test-model", make_mock_config())
@@ -436,8 +439,7 @@ class TestEvalRunnerRun:
     task = make_task(expected="C")
     runner = EvalRunner(tasks=[task], repeats=3)
 
-    mock_agent = MagicMock()
-    mock_agent.process = AsyncMock(return_value="C")
+    mock_agent = make_mock_agent("C")
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
       report = await runner.run("test-model", make_mock_config())
@@ -455,8 +457,7 @@ class TestEvalRunnerRun:
     task2.id = "K2"
     runner = EvalRunner(tasks=[task1, task2], repeats=2)
 
-    mock_agent = MagicMock()
-    mock_agent.process = AsyncMock(return_value="C")
+    mock_agent = make_mock_agent("C")
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
       report = await runner.run("test-model", make_mock_config())
@@ -491,6 +492,7 @@ class TestEvalRunnerRun:
 
     mock_agent = MagicMock()
     mock_agent.process = mock_process
+    mock_agent.aclose = AsyncMock()
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
       report = await runner.run("test-model", make_mock_config())
@@ -505,8 +507,7 @@ class TestEvalRunnerRun:
     task = make_task(expected="C")
     runner = EvalRunner(tasks=[task], repeats=1)
 
-    mock_agent = MagicMock()
-    mock_agent.process = AsyncMock(return_value="   ")
+    mock_agent = make_mock_agent("   ")
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
       report = await runner.run("test-model", make_mock_config())
@@ -527,8 +528,7 @@ class TestEvalRunnerRun:
       suite_version="2.0.0",
     )
 
-    mock_agent = MagicMock()
-    mock_agent.process = AsyncMock(return_value="C")
+    mock_agent = make_mock_agent("C")
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
       with patch("yoker_test.runner.yoker.__version__", "0.10.1"):
@@ -551,8 +551,7 @@ class TestEvalRunnerRun:
     config = make_mock_config()
     config.backend.config.model = "old-model"
 
-    mock_agent = MagicMock()
-    mock_agent.process = AsyncMock(return_value="C")
+    mock_agent = make_mock_agent("C")
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
       await runner.run("new-model", config)
@@ -563,8 +562,7 @@ class TestEvalRunnerRun:
     task = make_task(expected="C")
     runner = EvalRunner(tasks=[task], repeats=1)
 
-    mock_agent = MagicMock()
-    mock_agent.process = AsyncMock(return_value="C")
+    mock_agent = make_mock_agent("C")
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
       report = await runner.run("test-model", make_mock_config())
@@ -580,8 +578,7 @@ class TestEvalRunnerRun:
     task = TestTask(id="K1", category="knowledge", prompt="?", expected="C", scorer=custom_scorer)
     runner = EvalRunner(tasks=[task], repeats=1)
 
-    mock_agent = MagicMock()
-    mock_agent.process = AsyncMock(return_value="C")
+    mock_agent = make_mock_agent("C")
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
       report = await runner.run("test-model", make_mock_config())
@@ -593,8 +590,7 @@ class TestEvalRunnerRun:
     task.prompt = "What is 2+2?"
     runner = EvalRunner(tasks=[task], repeats=1)
 
-    mock_agent = MagicMock()
-    mock_agent.process = AsyncMock(return_value="C")
+    mock_agent = make_mock_agent("C")
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
       report = await runner.run("test-model", make_mock_config())
@@ -606,35 +602,34 @@ class TestEvalRunnerRun:
     task.difficulty = "hard"
     runner = EvalRunner(tasks=[task], repeats=1)
 
-    mock_agent = MagicMock()
-    mock_agent.process = AsyncMock(return_value="C")
+    mock_agent = make_mock_agent("C")
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
       report = await runner.run("test-model", make_mock_config())
 
     assert report.results[0].difficulty == "hard"
 
-  async def test_summary_empty_p2_5_fills_later(self):
-    """P2.4 returns empty summary — P2.5 adds aggregation."""
+  async def test_summary_populated_after_run(self):
+    """run() populates summary and overall via aggregation."""
     task = make_task(expected="C")
     runner = EvalRunner(tasks=[task], repeats=1)
 
-    mock_agent = MagicMock()
-    mock_agent.process = AsyncMock(return_value="C")
+    mock_agent = make_mock_agent("C")
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
       report = await runner.run("test-model", make_mock_config())
 
-    assert report.summary == {}
-    assert report.overall is None
+    assert report.summary != {}
+    assert "knowledge" in report.summary
+    assert report.overall is not None
+    assert report.overall.score == 1.0
 
   async def test_ttft_captured_when_events_present(self):
     """TTFT is captured from TURN_START and CONTENT_START events."""
     task = make_task(expected="C")
     runner = EvalRunner(tasks=[task], repeats=1)
 
-    mock_agent = MagicMock()
-    mock_agent.process = AsyncMock(return_value="C")
+    mock_agent = make_mock_agent("C")
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
       with patch("yoker_test.runner.StatsCollector") as mock_collector_cls:
@@ -660,8 +655,7 @@ class TestEvalRunnerRun:
     task = make_task(expected="C")
     runner = EvalRunner(tasks=[task], repeats=1)
 
-    mock_agent = MagicMock()
-    mock_agent.process = AsyncMock(return_value="C")
+    mock_agent = make_mock_agent("C")
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
       with patch("yoker_test.runner.StatsCollector") as mock_collector_cls:
@@ -702,8 +696,7 @@ class TestEvalRunnerRun:
     )
     runner = EvalRunner(tasks=[task], repeats=1)
 
-    mock_agent = MagicMock()
-    mock_agent.process = AsyncMock(return_value="C")
+    mock_agent = make_mock_agent("C")
 
     with patch("yoker_test.runner.yoker.agent", return_value=mock_agent) as mock_factory:
       await runner.run("test-model", make_mock_config())

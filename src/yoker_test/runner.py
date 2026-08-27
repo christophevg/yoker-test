@@ -6,6 +6,7 @@ the ``event_handler`` for ``StatsCollector`` to capture TurnEndEvent metrics.
 event handler.
 """
 
+import sys
 import time
 from datetime import datetime
 from typing import Any, cast
@@ -13,6 +14,7 @@ from typing import Any, cast
 import yoker
 from yoker.events import Event, EventCallback, EventType, TurnEndEvent
 
+from yoker_test.report import aggregate_results, summarize_overall
 from yoker_test.schema import RunMetadata, TestReport, TestResult, TestTask
 from yoker_test.scorers import SCORERS, normalize_score_result
 
@@ -81,6 +83,8 @@ async def run_single_test(task: TestTask, config: Any) -> TestResult:
   except Exception as exc:
     response = ""
     error = str(exc)
+  finally:
+    await agent.aclose()
   wall_ms = (time.perf_counter() - t0) * 1000
 
   # Normalize tokens: prefer OpenAI/Anthropic fields, fall back to Ollama
@@ -137,8 +141,8 @@ class EvalRunner:
   Full refusal detection is deferred to P2.12. P2.4 detects only empty
   responses as likely refusals.
 
-  Aggregation (summary/overall) is deferred to P2.5. P2.4 returns a
-  TestReport with empty summary and None overall.
+  Aggregation (summary/overall) is computed in run() via aggregate_results
+  and summarize_overall.
   """
 
   def __init__(
@@ -167,19 +171,33 @@ class EvalRunner:
       config: A yoker Config instance (typed as Any to avoid hard dependency).
 
     Returns:
-      TestReport with results and metadata. Summary and overall are
-      empty/None — P2.5 adds aggregation.
+      TestReport with results, metadata, category summaries, and overall.
     """
     config.backend.config.model = model
 
     results: list[TestResult] = []
+    total = len(self._tasks) * self._repeats
+    idx = 0
     for task in self._tasks:
       for repeat in range(self._repeats):
+        idx += 1
+        print(
+          f"[{idx}/{total}] {task.id} r{repeat}... ",
+          end="",
+          flush=True,
+          file=sys.stderr,
+        )
         result = await self._execute_once(task, repeat, config)
         results.append(result)
+        if result.error:
+          print(f"FAIL ({result.error})", file=sys.stderr)
+        else:
+          print(f"score={result.score:.1f}", file=sys.stderr)
 
     metadata = self._build_metadata(model, config)
-    return TestReport(run=metadata, results=results)
+    summary = aggregate_results(results, self._weights)
+    overall = summarize_overall(results, summary, self._weights)
+    return TestReport(run=metadata, results=results, summary=summary, overall=overall)
 
   async def _execute_once(self, task: TestTask, repeat: int, config: Any) -> TestResult:
     """Execute one task for one repeat. Errors don't propagate.
@@ -187,16 +205,15 @@ class EvalRunner:
     One task failure does NOT abort the suite — the outer loop continues
     to the next task/repeat.
     """
+    collector = StatsCollector()
+    agent = yoker.agent(
+      config=config,
+      tools=None,
+      system_prompt=task.system_prompt,
+      console_logging=False,
+      event_handler=cast(EventCallback, collector),
+    )
     try:
-      collector = StatsCollector()
-      agent = yoker.agent(
-        config=config,
-        tools=None,
-        system_prompt=task.system_prompt,
-        console_logging=False,
-        event_handler=cast(EventCallback, collector),
-      )
-
       t0 = time.perf_counter()
       response = await agent.process(task.prompt)
       wall_ms = (time.perf_counter() - t0) * 1000
@@ -269,6 +286,8 @@ class EvalRunner:
         repeat=repeat,
         prompt=task.prompt,
       )
+    finally:
+      await agent.aclose()
 
   def _build_metadata(self, model: str, config: Any) -> RunMetadata:
     """Collect run metadata from config and runner state."""
