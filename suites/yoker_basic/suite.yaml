@@ -1,10 +1,31 @@
 suite: yoker_basic
 version: "1.0"
-description: "Basic evaluation suite with the original MCQ gold-symbol task."
+description: "Basic evaluation suite with 30 tasks across 5 categories"
 repeats: 3
 temperature: 0.0
 seed: 42
+max_tokens: 4096
+
+aggregation:
+  weights:
+    knowledge: 0.25
+    reasoning: 0.25
+    instruction: 0.20
+    code: 0.15
+    tool_use: 0.15
+
+scorers:
+  numeric_match:
+    tolerance: 0.01
+  code_execution:
+    timeout: 5
+
+task_generator: !function generators.generate_dynamic_tasks
+generator_config:
+  seed: 42
+
 tasks:
+  # --- knowledge (8 tasks) ---
   - id: K1
     category: knowledge
     difficulty: easy
@@ -17,3 +38,287 @@ tasks:
       Reply with only the letter of the correct answer.
     expected: "C"
     scorer: mcq
+
+  - id: K2
+    category: knowledge
+    difficulty: easy
+    prompt: |
+      Question: What is the capital of France?
+      A) Berlin
+      B) Madrid
+      C) Paris
+      D) Rome
+      Reply with only the letter of the correct answer.
+    expected: "C"
+    scorer: mcq
+
+  - id: K3
+    category: knowledge
+    difficulty: easy
+    prompt: |
+      Question: Which planet is known as the Red Planet?
+      A) Venus
+      B) Mars
+      C) Jupiter
+      D) Saturn
+      Reply with only the letter of the correct answer.
+    expected: "B"
+    scorer: mcq
+
+  - id: K4
+    category: knowledge
+    difficulty: medium
+    prompt: |
+      Question: Who wrote the novel "War and Peace"?
+      A) Fyodor Dostoevsky
+      B) Leo Tolstoy
+      C) Anton Chekhov
+      D) Ivan Turgenev
+      Reply with only the letter of the correct answer.
+    expected: "B"
+    scorer: mcq
+
+  - id: K5
+    category: knowledge
+    difficulty: medium
+    prompt: |
+      Question: What is the largest organ in the human body?
+      A) Liver
+      B) Heart
+      C) Skin
+      D) Brain
+      Reply with only the letter of the correct answer.
+    expected: "C"
+    scorer: mcq
+
+  - id: K6
+    category: knowledge
+    difficulty: medium
+    prompt: |
+      Question: In which year did World War II end?
+      A) 1943
+      B) 1944
+      C) 1945
+      D) 1946
+      Reply with only the letter of the correct answer.
+    expected: "C"
+    scorer: mcq
+
+  - id: K7
+    category: knowledge
+    difficulty: hard
+    prompt: |
+      Question: What is the chemical formula for sulfuric acid?
+      A) HCl
+      B) HNO3
+      C) H2SO4
+      D) CH4
+      Reply with only the letter of the correct answer.
+    expected: "C"
+    scorer: mcq
+
+  - id: K8
+    category: knowledge
+    difficulty: hard
+    prompt: |
+      Question: Who proposed the theory of general relativity?
+      A) Isaac Newton
+      B) Albert Einstein
+      C) Niels Bohr
+      D) Stephen Hawking
+      Reply with only the letter of the correct answer.
+    expected: "B"
+    scorer: mcq
+
+  # --- reasoning (6 static tasks) ---
+  - id: R1
+    category: reasoning
+    difficulty: easy
+    prompt: "What is 15% of 240? Answer with just the number."
+    expected: 36
+    scorer: numeric_match
+
+  - id: R2
+    category: reasoning
+    difficulty: easy
+    prompt: "If a train travels 60 km in 45 minutes, what is its speed in km/h? Answer with just the number."
+    expected: 80
+    scorer: numeric_match
+
+  - id: R3
+    category: reasoning
+    difficulty: medium
+    prompt: "What is the next number in the sequence 2, 4, 8, 16, ...? Answer with just the number."
+    expected: 32
+    scorer: numeric_match
+
+  - id: R4
+    category: reasoning
+    difficulty: medium
+    prompt: "If 3x + 7 = 22, what is x? Answer with just the number."
+    expected: 5
+    scorer: numeric_match
+
+  - id: R5
+    category: reasoning
+    difficulty: hard
+    prompt: "How many ways can you arrange 5 distinct books on a shelf? Answer with just the number."
+    expected: 120
+    scorer: numeric_match
+
+  - id: R6
+    category: reasoning
+    difficulty: hard
+    prompt: "What is the sum of all prime numbers between 1 and 20? Answer with just the number."
+    expected: 77
+    scorer: numeric_match
+
+  # --- instruction (6 tasks) ---
+  - id: I1
+    category: instruction
+    difficulty: easy
+    prompt: "List exactly 3 fruits. Each on a new line prefixed with '- '."
+    expected: 3
+    scorer: !function scorers.count_bullet_lines
+
+  - id: I2
+    category: instruction
+    difficulty: easy
+    prompt: "List exactly 2 colors. Each on a new line prefixed with '* '."
+    expected: 2
+    scorer: !function scorers.count_bullet_lines
+
+  - id: I3
+    category: instruction
+    difficulty: medium
+    prompt: "List exactly 4 programming languages. Each on a new line prefixed with '- '."
+    expected: 4
+    scorer: !function scorers.count_bullet_lines
+
+  - id: I4
+    category: instruction
+    difficulty: medium
+    prompt: "List exactly 5 European capitals. Each on a new line prefixed with '- '."
+    expected: 5
+    scorer: !function scorers.count_bullet_lines
+
+  - id: I5
+    category: instruction
+    difficulty: hard
+    prompt: "List exactly 6 things you would find in a kitchen. Each on a new line prefixed with '* '."
+    expected: 6
+    scorer: !function scorers.count_bullet_lines
+
+  - id: I6
+    category: instruction
+    difficulty: hard
+    prompt: "List exactly 3 benefits of exercise. Each on a new line prefixed with '- '."
+    expected: 3
+    scorer: !function scorers.count_bullet_lines
+
+  # --- code (4 tasks) ---
+  - id: C1
+    category: code
+    difficulty: easy
+    prompt: "Write a Python function called `add(a, b)` that returns the sum of a and b."
+    expected: null
+    scorer: code_execution
+    scorer_config:
+      test_cases:
+        - func: add
+          args: [1, 2]
+          expected: 3
+        - func: add
+          args: [-1, 1]
+          expected: 0
+
+  - id: C2
+    category: code
+    difficulty: medium
+    prompt: "Write a Python function called `factorial(n)` that returns the factorial of n."
+    expected: null
+    scorer: code_execution
+    scorer_config:
+      test_cases:
+        - func: factorial
+          args: [0]
+          expected: 1
+        - func: factorial
+          args: [5]
+          expected: 120
+        - func: factorial
+          args: [3]
+          expected: 6
+
+  - id: C3
+    category: code
+    difficulty: medium
+    prompt: "Write a Python function called `is_palindrome(s)` that returns True if the string s is a palindrome."
+    expected: null
+    scorer: code_execution
+    scorer_config:
+      test_cases:
+        - func: is_palindrome
+          args: ["racecar"]
+          expected: true
+        - func: is_palindrome
+          args: ["hello"]
+          expected: false
+        - func: is_palindrome
+          args: [""]
+          expected: true
+
+  - id: C4
+    category: code
+    difficulty: hard
+    prompt: "Write a Python function called `merge_sorted(a, b)` that merges two sorted lists into one sorted list."
+    expected: null
+    scorer: code_execution
+    scorer_config:
+      test_cases:
+        - func: merge_sorted
+          args: [[1, 3, 5], [2, 4, 6]]
+          expected: [1, 2, 3, 4, 5, 6]
+        - func: merge_sorted
+          args: [[], [1, 2]]
+          expected: [1, 2]
+        - func: merge_sorted
+          args: [[1], []]
+          expected: [1]
+
+  # --- tool_use (4 tasks) ---
+  - id: T1
+    category: tool_use
+    difficulty: easy
+    prompt: "Use the calculator tool to compute 17 * 23. Respond with a JSON tool call."
+    expected:
+      tool: calculator
+      args: ["17", "*", "23"]
+    scorer: !function scorers.tool_call_verify
+
+  - id: T2
+    category: tool_use
+    difficulty: easy
+    prompt: "Use the weather tool to get the weather for Tokyo. Respond with a JSON tool call."
+    expected:
+      tool: weather
+      args: ["Tokyo"]
+    scorer: !function scorers.tool_call_verify
+
+  - id: T3
+    category: tool_use
+    difficulty: medium
+    prompt: "Use the search tool to search for 'Python asyncio tutorial'. Respond with a JSON tool call."
+    expected:
+      tool: search
+      args: ["Python", "asyncio", "tutorial"]
+    scorer: !function scorers.tool_call_verify
+
+  - id: T4
+    category: tool_use
+    difficulty: medium
+    prompt: "Use the email tool to send an email to alice@example.com with subject 'Hello'. Respond with a JSON tool call."
+    expected:
+      tool: email
+      args: ["alice@example.com", "Hello"]
+    scorer: !function scorers.tool_call_verify

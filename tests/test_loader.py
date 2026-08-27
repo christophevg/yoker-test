@@ -219,8 +219,8 @@ tasks:
       "ignore_punctuation": True,
     }
 
-  def test_both_tasks_and_generator_generator_wins(self, tmp_path):
-    """When both tasks and task_generator are present, generator output wins."""
+  def test_both_tasks_and_generator_merged(self, tmp_path):
+    """When both tasks and task_generator are present, they are merged."""
     yaml_content = """
 suite: both_test
 version: "1.0"
@@ -239,10 +239,11 @@ generator_config:
     path = write_suite(tmp_path, yaml_content)
     config = load_suite(path)
 
-    # Generator output replaces static tasks
-    assert len(config.tasks) == 2
-    assert config.tasks[0].id == "DYN0"
-    assert config.tasks[1].id == "DYN1"
+    # Static + dynamic tasks are merged (static first, then generated)
+    assert len(config.tasks) == 3
+    assert config.tasks[0].id == "STATIC1"
+    assert config.tasks[1].id == "DYN0"
+    assert config.tasks[2].id == "DYN1"
 
   def test_empty_generator_config(self, tmp_path):
     """Generator is called with {} when generator_config is absent."""

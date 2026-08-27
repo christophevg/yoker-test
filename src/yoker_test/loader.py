@@ -1,6 +1,7 @@
 """Suite loader: parse YAML suite files into SuiteConfig objects."""
 
 import importlib
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -74,6 +75,11 @@ def load_suite(path: str | Path) -> SuiteConfig:
   if not resolved.exists():
     raise FileNotFoundError(f"Suite file not found: {resolved}")
 
+  # Auto-include the suite's directory for !function resolution
+  suite_dir = str(resolved.parent)
+  if suite_dir not in sys.path:
+    sys.path.insert(0, suite_dir)
+
   with open(resolved, encoding="utf-8") as f:
     raw = yaml.load(f, Loader=SuiteLoader)
 
@@ -93,16 +99,18 @@ def load_suite(path: str | Path) -> SuiteConfig:
   # Per-suite scorer config defaults (keyed by scorer name)
   scorer_config_defaults = raw.get("scorers") or {}
 
-  # Resolve tasks: generator takes precedence over static tasks
+  # Resolve tasks: static tasks always loaded, generator output appended
   task_generator = raw.get("task_generator")
   generator_config = raw.get("generator_config")
+
+  raw_tasks = raw.get("tasks") or []
+  tasks = [_build_task(t, scorer_config_defaults) for t in raw_tasks]
 
   if task_generator is not None:
     config = generator_config or {}
     generated = task_generator(config)
     if not isinstance(generated, list):
       raise ValueError(f"task_generator returned {type(generated).__name__}, expected list")
-    tasks = []
     for item in generated:
       if isinstance(item, TestTask):
         tasks.append(item)
@@ -112,9 +120,6 @@ def load_suite(path: str | Path) -> SuiteConfig:
         raise ValueError(
           f"task_generator returned {type(item).__name__}, expected TestTask or dict"
         )
-  else:
-    raw_tasks = raw.get("tasks") or []
-    tasks = [_build_task(t, scorer_config_defaults) for t in raw_tasks]
 
   return SuiteConfig(
     suite=suite,

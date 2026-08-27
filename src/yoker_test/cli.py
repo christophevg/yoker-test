@@ -16,8 +16,13 @@ async def cmd_eval(
   compare: str | None,
   output: str | None,
   repeats: int | None,
+  with_paths: list[str] | None = None,
 ) -> int:
   """Run an evaluation suite and print/save the report."""
+  for p in with_paths or []:
+    if p not in sys.path:
+      sys.path.insert(0, p)
+
   try:
     report = await evaluate(suite=suite, model=model, compare=compare, repeats=repeats)
   except (FileNotFoundError, ValueError) as e:
@@ -135,6 +140,13 @@ def main() -> None:
   eval_parser.add_argument(
     "--repeats", type=int, default=None, help="Override suite default repeats"
   )
+  eval_parser.add_argument(
+    "--with",
+    dest="with_paths",
+    action="append",
+    default=[],
+    help="Add a directory to sys.path before loading the suite (can be repeated)",
+  )
 
   subparsers.add_parser("suites", help="List available test suites")
 
@@ -144,7 +156,18 @@ def main() -> None:
   args = parser.parse_args()
 
   if args.command == "eval":
-    sys.exit(asyncio.run(cmd_eval(args.suite, args.model, args.compare, args.output, args.repeats)))
+    sys.exit(
+      asyncio.run(
+        cmd_eval(
+          args.suite,
+          args.model,
+          args.compare,
+          args.output,
+          args.repeats,
+          args.with_paths,
+        )
+      )
+    )
   elif args.command == "suites":
     sys.exit(cmd_suites())
   elif args.command == "show":
