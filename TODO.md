@@ -22,24 +22,6 @@
     (quality ranking of Ollama cloud models using usage % as cost factor).
 
 
-#### P2.9: Create the yoker_basic suite
-
-- [ ] **P2.9: Create suites/yoker_basic/ with 30-task suite YAML**
-  - Create `suites/yoker_basic/suite.yaml` with 30 tasks across 5 categories:
-    - **knowledge** (8 tasks): factual MCQ questions, scorer: mcq
-    - **reasoning** (8 tasks): math and logic, scorer: numeric_match
-    - **instruction** (6 tasks): format constraint compliance, scorer: custom (structural)
-    - **code** (4 tasks): Python code generation, scorer: code_execution
-    - **tool_use** (4 tasks): tool call scenarios, scorer: custom (tool_call_verify)
-  - Each task has: id, category, difficulty (easy/medium/hard), prompt, expected, scorer, scorer_config
-  - Suite metadata: `suite: yoker_basic`, `version: "1.0"`, `repeats: 3`, `temperature: 0.0`, `seed: 42`, `max_tokens: 4096`
-  - Aggregation weights: knowledge 0.25, reasoning 0.25, instruction 0.20, code 0.15, tool_use 0.15
-  - Include at least 2 dynamic tasks using `!function` tags (e.g., random math problems)
-  - Create `suites/yoker_basic/generators.py` with generator functions for dynamic tasks
-  - Create `suites/yoker_basic/scorers.py` with custom scorers (count_bullet_lines, tool_call_verify)
-  - **Satisfies**: FR3
-  - **Acceptance**: Suite loads successfully via `loader.load_suite()`. All 30 tasks parse correctly. Dynamic tasks generate properly. `validate_suite()` returns no errors. `yoker-test show --suite yoker_basic` displays all 30 tasks. `yoker-test eval --suite yoker_basic` runs all 30 tasks end-to-end. Category distribution is 8/8/6/4/4
-
 #### P2.10: Baseline registry
 
 - [ ] **P2.10: Implement baseline registry for regression comparison**
@@ -304,3 +286,19 @@
   - Implement `async evaluate(suite: str, model: str, compare: str | None = None) -> TestReport`: load suite from YAML (by name or path), create `EvalRunner`, run, optionally compare baseline, return `TestReport`
   - **Satisfies**: FR11
   - **Acceptance**: `from yoker_test import evaluate, EvalRunner, TestTask, TestReport, Score` works. `await evaluate(suite="yoker_basic", model="glm-5.2:cloud")` returns `TestReport`. `TestConfig` extends `yoker.Config` and is importable. Tests mock the runner and verify `evaluate()` orchestration
+- [x] **P2.9: Create suites/yoker_basic/ with 30-task suite YAML** (2026-08-27)
+  - Created `suites/yoker_basic/suite.yaml` with 30 tasks across 5 categories:
+    - **knowledge** (8 tasks): factual MCQ questions, scorer: mcq
+    - **reasoning** (8 tasks): math and logic, scorer: numeric_match
+    - **instruction** (6 tasks): format constraint compliance, scorer: custom (structural)
+    - **code** (4 tasks): Python code generation, scorer: code_execution
+    - **tool_use** (4 tasks): tool call scenarios, scorer: custom (tool_call_verify)
+  - Each task has: id, category, difficulty (easy/medium/hard), prompt, expected, scorer, scorer_config
+  - Suite metadata: `suite: yoker_basic`, `version: "1.0"`, `repeats: 3`, `temperature: 0.0`, `seed: 42`, `max_tokens: 4096`
+  - Aggregation weights: knowledge 0.25, reasoning 0.25, instruction 0.20, code 0.15, tool_use 0.15
+  - Included dynamic tasks using `!function` tags (random math problems)
+  - Created `suites/yoker_basic/generators.py` with generator functions for dynamic tasks
+  - Created `suites/yoker_basic/scorers.py` with custom scorers (count_bullet_lines, tool_call_verify)
+  - **Satisfies**: FR3
+  - **Acceptance**: Suite loads successfully via `loader.load_suite()`. All 30 tasks parse correctly. Dynamic tasks generate properly. `validate_suite()` returns no errors. `yoker-test show --suite yoker_basic` displays all 30 tasks. `yoker-test eval --suite yoker_basic` runs all 30 tasks end-to-end. Category distribution is 8/8/6/4/4
+  - **Merged via PR #9**
