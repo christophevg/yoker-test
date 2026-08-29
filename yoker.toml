@@ -1,3 +1,6 @@
+[backend.ollama]
+model = "glm-5.3-flash:cloud"
+
 [permissions]
 filesystem_paths = [ ".", "../yoker", "../c3" ]
 blocked_write_paths = [ "../yoker" ]
