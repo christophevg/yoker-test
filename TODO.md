@@ -101,6 +101,7 @@
     exchange
 
 - [ ] **P2.5.10: Ollama credit usage statistics + score-per-cost ranking** (Moderate)
+  - **Status**: implemented on branch feature/p2.5.10-credit-usage, PR #10 (draft) — pending owner review; backend-injection revision approved on PR
   - (a) Research how Ollama exposes credit/usage data for cloud models;
     evaluate current wiring of `usage.py`'s `fetch_ollama_usage` (extracted
     in P1.3) into the eval flow

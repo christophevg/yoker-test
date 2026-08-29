@@ -28,6 +28,11 @@ make run MODEL=gpt-oss:20b-cloud
 uv run yoker-test --model glm-5.2:cloud
 ```
 
+When a backend supports it (Ollama Cloud), saved reports include account-level
+usage (session/weekly quota, requests) and a 0–1 **Composite** score:
+quality weighted down by session-quota cost per correct answer. Models whose
+score is not statistically distinguishable from their neighbor are flagged `≈`.
+
 ## Testing
 
 ```bash
@@ -53,6 +58,8 @@ make build
 ## Status
 
 Pre-alpha. Under active development.
+
+NOTE: saved results include account-level Ollama usage footprint (low sensitivity); the raw usage API payload is never persisted.
 
 ## License
 

@@ -2,8 +2,18 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from yoker_test.runner import EvalRunner, StatsCollector, run_single_test
 from yoker_test.schema import TestReport, TestTask
+
+
+@pytest.fixture(autouse=True)
+def mock_backend_factory(monkeypatch):
+  """Unit tests never construct a real yoker backend (no env churn, no HTTP)."""
+  backend = MagicMock()
+  backend.fetch_usage = AsyncMock(return_value=None)
+  monkeypatch.setattr("yoker_test.runner.create_backend", MagicMock(return_value=backend))
 
 
 class TestStatsCollectorTurnEnd:
@@ -376,10 +386,15 @@ class TestStatsCollectorTTFT:
 
 
 def make_mock_config(provider: str = "ollama") -> MagicMock:
-  """Create a mock config with a backend for EvalRunner tests."""
+  """Create a mock config with a backend for EvalRunner tests.
+
+  ``ollama`` is None so no usage-fetch path can see an auto-truthy api_key —
+  unit tests must never fire real HTTP.
+  """
   config = MagicMock()
   config.backend.provider = provider
   config.backend.config.model = "old-model"
+  config.backend.ollama = None
   return config
 
 
@@ -703,3 +718,219 @@ class TestEvalRunnerRun:
 
     _, kwargs = mock_factory.call_args
     assert kwargs["system_prompt"] == "You are a helpful assistant."
+
+
+class TestEvalRunnerUsageCapture:
+  """Tests for usage snapshotting and backend injection in EvalRunner.run()."""
+
+  @staticmethod
+  def make_backend(payloads):
+    """Backend whose consecutive fetch_usage() calls replay payloads (None = fail)."""
+    backend = MagicMock()
+    calls = {"n": 0}
+
+    async def fetch():
+      calls["n"] += 1
+      if calls["n"] > len(payloads):
+        return None
+      return payloads[calls["n"] - 1]
+
+    backend.fetch_usage = AsyncMock(side_effect=fetch)
+    return backend, calls
+
+  @staticmethod
+  def patch_runner(backend):
+    return patch("yoker_test.runner.create_backend", MagicMock(return_value=backend))
+
+  async def test_backend_injected_into_agent(self):
+    """yoker.agent() receives the single shared backend on every call."""
+    task = make_task(expected="C")
+    runner = EvalRunner(tasks=[task, task], repeats=2)
+    backend, _ = self.make_backend([])
+
+    agent_calls = []
+
+    def agent_factory(**kwargs):
+      agent_calls.append(kwargs["backend"])
+      return make_mock_agent("C")
+
+    with (
+      self.patch_runner(backend),
+      patch("yoker_test.runner.yoker.agent", side_effect=agent_factory),
+    ):
+      await runner.run("glm-5.2:cloud", make_mock_config())
+
+    assert len(agent_calls) == 4
+    assert all(b is backend for b in agent_calls)
+
+  async def test_snapshot_cadence_n_plus_one_fetches(self):
+    """Shared consecutive edges: 2 executions → 3 fetches (N+1)."""
+    task = make_task(expected="C")
+    runner = EvalRunner(tasks=[task, task], repeats=1)
+
+    def snap(s, w, req, cost):
+      return {
+        "limits": {
+          "session": {"usage": s},
+          "weekly": {"usage": w, "models": [{"name": "glm-5.2", "request_count": req}]},
+        },
+        "activity": {"cost": cost},
+      }
+
+    backend, calls = self.make_backend(
+      [
+        snap(0.046, 0.051, 100, "0.00000"),
+        snap(0.050, 0.052, 101, "0.01000"),
+        snap(0.054, 0.053, 102, "0.02000"),
+      ]
+    )
+
+    with (
+      self.patch_runner(backend),
+      patch("yoker_test.runner.yoker.agent", return_value=make_mock_agent("C")),
+    ):
+      report = await runner.run("glm-5.2:cloud", make_mock_config())
+
+    assert calls["n"] == 3
+    # Run aggregate = first-before + last-after
+    assert report.overall.usage_delta == pytest.approx({"session": 0.008, "weekly": 0.002})
+    assert report.overall.requests_delta == 2
+    assert report.overall.usage_before == {"session": 0.046, "weekly": 0.051}
+    assert report.overall.usage_after == {"session": 0.054, "weekly": 0.053}
+    assert report.overall.extra_usage_cost_delta == pytest.approx(0.02)
+    assert report.overall.usage_note is None
+    # Per-execution deltas from shared edges: t0 before snap0, after snap1;
+    # t1 before snap1, after snap2.
+    assert report.results[0].usage_delta == pytest.approx({"session": 0.004, "weekly": 0.001})
+    assert report.results[1].usage_delta == pytest.approx({"session": 0.004, "weekly": 0.001})
+    assert [r.requests_delta for r in report.results] == [1, 1]
+
+  async def test_circuit_breaker_after_three_consecutive_none(self):
+    """3 consecutive unavailable snapshots → no further fetches this run."""
+    task = make_task(expected="C")
+    runner = EvalRunner(tasks=[task], repeats=3)
+    backend, calls = self.make_backend([None])
+
+    with (
+      self.patch_runner(backend),
+      patch("yoker_test.runner.yoker.agent", return_value=make_mock_agent("C")),
+    ):
+      report = await runner.run("glm-5.2:cloud", make_mock_config())
+
+    # first-before fails, first-after fails, per-test never fetches again
+    assert calls["n"] == 3
+    assert len(report.results) == 3
+    assert report.overall.usage_delta is None
+    assert report.overall.usage_note == "usage API unavailable"
+
+  async def test_negative_session_delta_dropped_with_note(self):
+    """Session window reset mid-run: key dropped, weekly kept, note mentions reset."""
+    task = make_task(expected="C")
+    runner = EvalRunner(tasks=[task], repeats=1)
+
+    def snap(s, w, req, cost):
+      return {
+        "limits": {
+          "session": {"usage": s},
+          "weekly": {"usage": w, "models": [{"name": "glm-5.2", "request_count": req}]},
+        },
+        "activity": {"cost": cost},
+      }
+
+    backend, _ = self.make_backend(
+      [snap(0.9, 0.5, 10, "0.00000"), snap(0.046, 0.52, 11, "0.50000")]
+    )
+
+    with (
+      self.patch_runner(backend),
+      patch("yoker_test.runner.yoker.agent", return_value=make_mock_agent("C")),
+    ):
+      report = await runner.run("glm-5.2:cloud", make_mock_config())
+
+    assert report.overall.usage_delta == pytest.approx({"weekly": 0.02})
+    assert report.overall.requests_delta == 1
+    assert report.overall.extra_usage_cost_delta == pytest.approx(0.5)
+    assert report.overall.usage_note == "session window reset mid-run"
+
+  async def test_negative_weekly_delta_dropped_with_note(self):
+    """Weekly window reset mid-run: weekly key dropped, session kept, note names it."""
+    task = make_task(expected="C")
+    runner = EvalRunner(tasks=[task], repeats=1)
+
+    def snap(s, w, req):
+      return {
+        "limits": {
+          "session": {"usage": s},
+          "weekly": {"usage": w, "models": [{"name": "glm-5.2", "request_count": req}]},
+        },
+      }
+
+    backend, _ = self.make_backend([snap(0.1, 0.9, 10), snap(0.12, 0.05, 11)])
+
+    with (
+      self.patch_runner(backend),
+      patch("yoker_test.runner.yoker.agent", return_value=make_mock_agent("C")),
+    ):
+      report = await runner.run("glm-5.2:cloud", make_mock_config())
+
+    assert report.overall.usage_delta == pytest.approx({"session": 0.02})
+    assert report.overall.usage_note == "weekly window reset mid-run"
+
+  async def test_quantized_zero_delta_persisted_as_zero(self):
+    """A measured 0.000 delta (server quantization) is stored as 0.0, not None.
+    Consumers distinguish 'measured zero' from 'unavailable' (None)."""
+    task = make_task(expected="C")
+    runner = EvalRunner(tasks=[task], repeats=1)
+    s0 = {
+      "limits": {
+        "session": {"usage": 0.046},
+        "weekly": {"usage": 0.051, "models": [{"name": "glm-5.2", "request_count": 100}]},
+      }
+    }
+    s1 = {
+      "limits": {
+        "session": {"usage": 0.046},
+        "weekly": {"usage": 0.051, "models": [{"name": "glm-5.2", "request_count": 100}]},
+      }
+    }
+    backend, _ = self.make_backend([s0, s1])
+
+    with (
+      self.patch_runner(backend),
+      patch("yoker_test.runner.yoker.agent", return_value=make_mock_agent("C")),
+    ):
+      report = await runner.run("glm-5.2:cloud", make_mock_config())
+
+    assert report.overall.usage_delta == {"session": 0.0, "weekly": 0.0}
+    assert report.results[0].usage_delta == {"session": 0.0, "weekly": 0.0}
+    assert report.overall.usage_note is None
+
+  async def test_usage_api_unavailable_note_on_total_failure(self):
+    """Backend without fetch_usage (non-Ollama): fields None, honest note."""
+    task = make_task(expected="C")
+    runner = EvalRunner(tasks=[task], repeats=1)
+    backend = object()  # no fetch_usage attr — e.g. LitellmBackend
+
+    with (
+      self.patch_runner(backend),
+      patch("yoker_test.runner.yoker.agent", return_value=make_mock_agent("C")),
+    ):
+      report = await runner.run("glm-5.2:cloud", make_mock_config())
+
+    assert report.overall.usage_delta is None
+    assert report.overall.requests_delta is None
+    assert report.overall.usage_note == "usage API unavailable"
+
+  async def test_run_single_test_accepts_injected_backend(self):
+    """run_single_test passes an injected backend through to the agent."""
+    task = make_task(expected="C")
+    backend = MagicMock()
+
+    def agent_factory(**kwargs):
+      assert kwargs["backend"] is backend
+      return make_mock_agent("C")
+
+    with patch("yoker_test.runner.yoker.agent", side_effect=agent_factory):
+      result = await run_single_test(task, config=make_mock_config(), backend=backend)
+
+    assert result.score == 1.0
