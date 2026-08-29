@@ -279,6 +279,123 @@ class TestOverallSummary:
     assert summary.usage_delta == {"session": 0.02, "weekly": 0.05}
 
 
+class TestUsageFields:
+  """Tests for P2.5.10 usage fields on TestResult and OverallSummary."""
+
+  def make_report(self, with_usage: bool = True) -> TestReport:
+    run = RunMetadata(
+      suite="s",
+      suite_version="1",
+      model="glm-5.2:cloud",
+      provider="ollama",
+      yoker_version="0.10.1",
+      temperature=0.0,
+      seed=42,
+      repeats=1,
+      timestamp="2025-01-01",
+    )
+    kwargs = (
+      {"usage_delta": {"session": 0.004, "weekly": 0.001}, "requests_delta": 1}
+      if with_usage
+      else {}
+    )
+    results = [
+      TestResult(task_id="K1", category="knowledge", score=1.0, response="C", **kwargs)
+      for _ in range(2)
+    ]
+    overall_kwargs = (
+      {
+        "usage_delta": {"session": 0.008, "weekly": 0.002},
+        "usage_note": None,
+        "usage_before": {"session": 0.046, "weekly": 0.051},
+        "usage_after": {"session": 0.054, "weekly": 0.053},
+        "requests_delta": 2,
+        "extra_usage_cost_delta": 0.5,
+        "composite": 0.99,
+      }
+      if with_usage
+      else {}
+    )
+    overall = OverallSummary(
+      score=1.0,
+      std=0.0,
+      total_tokens_in=0,
+      total_tokens_out=0,
+      total_tokens=0,
+      total_latency_s=0.0,
+      avg_tokens_per_second=0.0,
+      **overall_kwargs,
+    )
+    return TestReport(run=run, results=results, summary={}, overall=overall)
+
+  def test_new_fields_default_to_none(self):
+    result = TestResult(task_id="K1", category="k", score=1.0, response="")
+    assert result.usage_delta is None
+    assert result.requests_delta is None
+    overall = OverallSummary(
+      score=0.0,
+      std=0.0,
+      total_tokens_in=0,
+      total_tokens_out=0,
+      total_tokens=0,
+      total_latency_s=0.0,
+      avg_tokens_per_second=0.0,
+    )
+    assert overall.usage_note is None
+    assert overall.usage_before is None
+    assert overall.usage_after is None
+    assert overall.requests_delta is None
+    assert overall.extra_usage_cost_delta is None
+    assert overall.composite is None
+
+  def test_round_trip_preserves_usage_fields(self):
+    report = self.make_report()
+    d = report.to_dict()
+    assert d["results"][0]["usage_delta"] == {"session": 0.004, "weekly": 0.001}
+    assert d["results"][0]["requests_delta"] == 1
+    assert d["overall"]["composite"] == 0.99
+    assert d["overall"]["extra_usage_cost_delta"] == 0.5
+    report.to_yaml()
+    report.to_json()  # all values JSON-serializable
+    loaded = TestReport.from_dict(d)
+    assert loaded.results[0].usage_delta == {"session": 0.004, "weekly": 0.001}
+    assert loaded.results[0].requests_delta == 1
+    assert loaded.overall.usage_before == {"session": 0.046, "weekly": 0.051}
+    assert loaded.overall.usage_after == {"session": 0.054, "weekly": 0.053}
+    assert loaded.overall.requests_delta == 2
+    assert loaded.overall.extra_usage_cost_delta == 0.5
+    assert loaded.overall.composite == 0.99
+
+  def test_old_file_without_new_keys_loads_with_defaults(self):
+    report = self.make_report(with_usage=False)
+    loaded = TestReport.from_dict(report.to_dict())
+    assert loaded.results[0].usage_delta is None
+    assert loaded.results[0].requests_delta is None
+    assert loaded.overall.usage_note is None
+    assert loaded.overall.usage_before is None
+    assert loaded.overall.usage_after is None
+    assert loaded.overall.requests_delta is None
+    assert loaded.overall.extra_usage_cost_delta is None
+    assert loaded.overall.composite is None
+
+  def test_serialization_carries_normalized_fields_only(self):
+    """Security invariant: no raw-payload fields (e.g. limits.*, activity.*) leak out."""
+    report = self.make_report()
+    raw_payload_keys = {"limits", "activity", "models", "request_count", "api_key", "cost_raw"}
+    d = report.to_dict()
+
+    def walk(node):
+      if isinstance(node, dict):
+        assert not raw_payload_keys & set(node.keys())
+        for v in node.values():
+          walk(v)
+      elif isinstance(node, list):
+        for v in node:
+          walk(v)
+
+    walk(d)
+
+
 class TestComparisonReport:
   """Tests for ComparisonReport dataclass."""
 

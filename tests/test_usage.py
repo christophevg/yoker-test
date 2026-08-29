@@ -1,168 +1,113 @@
-"""Tests for yoker_test.usage."""
+"""Tests for yoker_test.usage — normalized extraction from backend usage payloads."""
 
-from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import httpx
-
-from yoker_test.usage import fetch_ollama_usage
+from yoker_test.usage import extract_usage_metrics, fetch_usage_metrics
 
 
-def make_config(api_key: str | None = "test-key") -> SimpleNamespace:
-  """Create a config object with an ollama backend section."""
-  ollama = SimpleNamespace(api_key=api_key) if api_key else None
-  backend = SimpleNamespace(ollama=ollama)
-  return SimpleNamespace(backend=backend)
+class FakeUsageBackend:
+  """Minimal backend exposing fetch_usage() with a canned payload."""
+
+  def __init__(self, payload, fail=False):
+    self._payload = payload
+    self._fail = fail
+    self.calls = 0
+
+  async def fetch_usage(self):
+    self.calls += 1
+    if self._fail:
+      raise RuntimeError("network down")
+    return self._payload
 
 
-def make_response(data: dict, status: int = 200) -> MagicMock:
-  """Create a mock httpx response."""
-  resp = MagicMock()
-  resp.status_code = status
-  resp.json.return_value = data
-  if status >= 400:
-    resp.raise_for_status.side_effect = httpx.HTTPStatusError(
-      "error", request=MagicMock(), response=resp
-    )
-  else:
-    resp.raise_for_status.return_value = None
-  return resp
+FULL_PAYLOAD = {
+  "activity": {"cost": "0.04600", "period": {"type": "last_4_weeks"}},
+  "limits": {
+    "session": {
+      "usage": 0.046,
+      "models": [
+        {"name": "glm-5.2", "request_count": 34},
+        {"name": "minimax-m3", "request_count": 2},
+      ],
+    },
+    "weekly": {
+      "usage": 0.051,
+      "models": [
+        {"name": "glm-5.2", "request_count": 254},
+        {"name": "minimax-m3", "request_count": 107},
+      ],
+    },
+  },
+}
 
 
-class TestFetchOllamaUsageNoApiKey:
-  """Tests for missing API key / ollama config."""
+class TestExtractUsageMetrics:
+  """Tests for extract_usage_metrics (pure payload normalization)."""
 
-  async def test_no_ollama_config(self):
-    config = SimpleNamespace(backend=SimpleNamespace(ollama=None))
-    result = await fetch_ollama_usage(config)
-    assert result is None
+  def test_full_payload(self):
+    snap = extract_usage_metrics(FULL_PAYLOAD)
+    assert snap["session"] == 0.046
+    assert snap["weekly"] == 0.051
+    assert snap["requests"] == {"glm-5.2": 254, "minimax-m3": 107}
+    assert snap["extra_usage_cost"] == 0.046
 
-  async def test_no_api_key(self):
-    config = make_config(api_key=None)
-    result = await fetch_ollama_usage(config)
-    assert result is None
+  def test_missing_keys_tolerated(self):
+    snap = extract_usage_metrics({})
+    assert snap == {"session": 0.0, "weekly": 0.0, "requests": {}, "extra_usage_cost": None}
 
-  async def test_empty_api_key(self):
-    ollama = SimpleNamespace(api_key="")
-    config = SimpleNamespace(backend=SimpleNamespace(ollama=ollama))
-    result = await fetch_ollama_usage(config)
-    assert result is None
+  def test_partial_windows(self):
+    snap = extract_usage_metrics({"limits": {"session": {"usage": 0.5}}})
+    assert snap["session"] == 0.5
+    assert snap["weekly"] == 0.0
+    assert snap["requests"] == {}
 
+  def test_malformed_cost_returns_none(self):
+    snap = extract_usage_metrics({"activity": {"cost": "not-a-number"}})
+    assert snap["extra_usage_cost"] is None
 
-class TestFetchOllamaUsageSuccess:
-  """Tests for successful API response parsing."""
+  def test_none_cost_stays_none(self):
+    snap = extract_usage_metrics({"activity": {}})
+    assert snap["extra_usage_cost"] is None
 
-  async def test_parses_usage_data(self):
-    data = {
+  def test_malformed_model_entries_skipped(self):
+    payload = {
       "limits": {
-        "session": {"usage": 0.15},
-        "weekly": {"usage": 0.42},
+        "weekly": {
+          "usage": 0.1,
+          "models": [
+            {"name": "m1"},
+            {"request_count": 3},
+            "garbage",
+            {"name": "m2", "request_count": 7},
+          ],
+        }
       }
     }
-    resp = make_response(data)
-    client = AsyncMock()
-    client.__aenter__.return_value = client
-    client.get.return_value = resp
+    snap = extract_usage_metrics(payload)
+    assert snap["requests"] == {"m2": 7}
 
-    with patch("yoker_test.usage.httpx.AsyncClient", return_value=client):
-      result = await fetch_ollama_usage(make_config())
-
-    assert result == {"session": 0.15, "weekly": 0.42}
-
-  async def test_defaults_to_zero_when_missing_fields(self):
-    data = {"limits": {}}
-    resp = make_response(data)
-    client = AsyncMock()
-    client.__aenter__.return_value = client
-    client.get.return_value = resp
-
-    with patch("yoker_test.usage.httpx.AsyncClient", return_value=client):
-      result = await fetch_ollama_usage(make_config())
-
-    assert result == {"session": 0.0, "weekly": 0.0}
-
-  async def test_defaults_to_zero_when_limits_missing(self):
-    data = {}
-    resp = make_response(data)
-    client = AsyncMock()
-    client.__aenter__.return_value = client
-    client.get.return_value = resp
-
-    with patch("yoker_test.usage.httpx.AsyncClient", return_value=client):
-      result = await fetch_ollama_usage(make_config())
-
-    assert result == {"session": 0.0, "weekly": 0.0}
-
-  async def test_partial_limits(self):
-    data = {"limits": {"session": {"usage": 0.5}}}
-    resp = make_response(data)
-    client = AsyncMock()
-    client.__aenter__.return_value = client
-    client.get.return_value = resp
-
-    with patch("yoker_test.usage.httpx.AsyncClient", return_value=client):
-      result = await fetch_ollama_usage(make_config())
-
-    assert result == {"session": 0.5, "weekly": 0.0}
-
-  async def test_sends_authorization_header(self):
-    data = {"limits": {"session": {"usage": 0.1}, "weekly": {"usage": 0.2}}}
-    resp = make_response(data)
-    client = AsyncMock()
-    client.__aenter__.return_value = client
-    client.get.return_value = resp
-
-    with patch("yoker_test.usage.httpx.AsyncClient", return_value=client):
-      await fetch_ollama_usage(make_config(api_key="my-secret-key"))
-
-    client.get.assert_called_once()
-    _, kwargs = client.get.call_args
-    assert kwargs["headers"]["Authorization"] == "Bearer my-secret-key"
+  def test_normalized_fields_only(self):
+    """Security invariant: only the documented normalized keys exist."""
+    snap = extract_usage_metrics(FULL_PAYLOAD)
+    assert set(snap.keys()) == {"session", "weekly", "requests", "extra_usage_cost"}
 
 
-class TestFetchOllamaUsageErrors:
-  """Tests for error handling."""
+class TestFetchUsageMetrics:
+  """Tests for fetch_usage_metrics (backend wrapper)."""
 
-  async def test_http_error_returns_none(self):
-    resp = make_response({}, status=403)
-    client = AsyncMock()
-    client.__aenter__.return_value = client
-    client.get.return_value = resp
+  async def test_backend_without_fetch_usage_returns_none(self):
+    assert await fetch_usage_metrics(object()) is None
 
-    with patch("yoker_test.usage.httpx.AsyncClient", return_value=client):
-      result = await fetch_ollama_usage(make_config())
+  async def test_backend_none_payload_returns_none(self):
+    backend = FakeUsageBackend(payload=None)
+    assert await fetch_usage_metrics(backend) is None
+    assert backend.calls == 1
 
-    assert result is None
+  async def test_happy_path_extracts_normalized(self):
+    backend = FakeUsageBackend(FULL_PAYLOAD)
+    snap = await fetch_usage_metrics(backend)
+    assert snap["session"] == 0.046
+    assert snap["requests"] == {"glm-5.2": 254, "minimax-m3": 107}
+    assert set(snap.keys()) == {"session", "weekly", "requests", "extra_usage_cost"}
 
-  async def test_network_error_returns_none(self):
-    client = AsyncMock()
-    client.__aenter__.side_effect = httpx.ConnectError("connection refused")
-
-    with patch("yoker_test.usage.httpx.AsyncClient", return_value=client):
-      result = await fetch_ollama_usage(make_config())
-
-    assert result is None
-
-  async def test_timeout_error_returns_none(self):
-    client = AsyncMock()
-    client.__aenter__.return_value = client
-    client.get.side_effect = httpx.ReadTimeout("timed out")
-
-    with patch("yoker_test.usage.httpx.AsyncClient", return_value=client):
-      result = await fetch_ollama_usage(make_config())
-
-    assert result is None
-
-  async def test_json_decode_error_returns_none(self):
-    resp = MagicMock()
-    resp.status_code = 200
-    resp.raise_for_status.return_value = None
-    resp.json.side_effect = ValueError("invalid json")
-    client = AsyncMock()
-    client.__aenter__.return_value = client
-    client.get.return_value = resp
-
-    with patch("yoker_test.usage.httpx.AsyncClient", return_value=client):
-      result = await fetch_ollama_usage(make_config())
-
-    assert result is None
+  async def test_backend_failure_degrades_to_none(self):
+    backend = FakeUsageBackend(None, fail=True)
+    assert await fetch_usage_metrics(backend) is None

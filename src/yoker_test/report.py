@@ -53,6 +53,27 @@ def compute_composite(
   return quality * cost_score
 
 
+def rank_composite(report: TestReport) -> float | None:
+  """Score-per-cost composite: quality × 1/(1 + session-usage-per-correct × 1000).
+
+  Delegates to compute_composite — the formula lives in exactly one place.
+  Returns None when the report has no overall summary. Reports without usage
+  rank identically to quality-only ranking (usage None ≡ zero usage).
+  """
+  if report.overall is None:
+    return None
+  quality = report.overall.score
+  usage = report.overall.usage_delta
+  n_tasks = len(report.results)
+  n_correct = quality * n_tasks
+  return compute_composite(
+    quality=quality,
+    cost_delta=usage.get("session") if usage else None,
+    n_tasks=n_tasks,
+    n_correct=n_correct,
+  )
+
+
 def print_report(
   task: TestTask,
   result: TestResult,
@@ -177,7 +198,7 @@ def summarize_overall(
   categories = list(category_summaries.keys())
 
   if not categories:
-    return OverallSummary(
+    overall = OverallSummary(
       score=0.0,
       std=0.0,
       total_tokens_in=0,
@@ -187,6 +208,8 @@ def summarize_overall(
       avg_tokens_per_second=0.0,
       usage_delta=usage_delta,
     )
+    overall.composite = None
+    return overall
 
   # Resolve weights: equal when None, normalized when provided
   if weights is None:
@@ -207,7 +230,7 @@ def summarize_overall(
   total_latency_s = sum(r.latency_ms for r in results) / 1000.0
   avg_tokens_per_second = total_tokens_out / total_latency_s if total_latency_s > 0 else 0.0
 
-  return OverallSummary(
+  overall = OverallSummary(
     score=score,
     std=std,
     total_tokens_in=total_tokens_in,
@@ -217,6 +240,13 @@ def summarize_overall(
     avg_tokens_per_second=avg_tokens_per_second,
     usage_delta=usage_delta,
   )
+  overall.composite = compute_composite(
+    quality=score,
+    cost_delta=usage_delta.get("session") if usage_delta else None,
+    n_tasks=len(results),
+    n_correct=score * len(results),
+  )
+  return overall
 
 
 def compare_baseline(current: TestReport, baseline: TestReport) -> ComparisonReport:
@@ -316,8 +346,19 @@ def format_console_report(report: TestReport) -> str:
     lines.append(f"  Latency:    {o.total_latency_s:.1f}s")
     lines.append(f"  Throughput: {o.avg_tokens_per_second:.1f} tok/s")
     if o.usage_delta is not None:
-      session = o.usage_delta.get("session", 0.0)
-      lines.append(f"  Usage Δ:    {session:.2f}%")
+      # Absent key = window reset mid-run — show N/A, not a false 0.00%.
+      session = o.usage_delta.get("session")
+      if session is not None:
+        lines.append(f"  Usage Δ:    {session:.2f}%")
+      else:
+        lines.append("  Usage Δ:    N/A")
+      weekly = o.usage_delta.get("weekly")
+      if weekly is not None:
+        lines.append(f"  Weekly Δ:   {weekly:.2f}%")
+    if o.usage_note is not None:
+      lines.append(f"  Note:       {o.usage_note}")
+    if o.composite is not None:
+      lines.append(f"  Composite:  {o.composite:.4f}")
     lines.append("")
 
   # Comparison
@@ -337,10 +378,15 @@ def format_console_report(report: TestReport) -> str:
 
 
 def format_quality_ranking(reports: list[TestReport]) -> str:
-  """Rank multiple TestReports by overall quality score (descending).
+  """Rank multiple TestReports by score-per-cost composite (descending).
 
+  Composite = quality weighted down by session-usage cost (rank_composite);
+  reports without usage data rank identically to quality-only ranking.
+  Adjacent rows whose composites are within 2 × max(std) are flagged "≈"
+  (statistical tie). Within a tie group, ordering is by quality only —
+  cheaper usage never promotes a row past a better-quality model.
   Reports without an overall summary are skipped. Raises ValueError if all
-  reports lack overall summaries. Ties are broken by model name (alphabetical).
+  reports lack overall summaries.
   """
   if not reports:
     return "No reports to rank."
@@ -353,22 +399,52 @@ def format_quality_ranking(reports: list[TestReport]) -> str:
       f"Models: {', '.join(models)}"
     )
 
-  ranked.sort(key=lambda r: (-r.overall.score, r.run.model))  # type: ignore[union-attr]
+  def _sort_key(r: TestReport) -> tuple[float, float, str]:
+    assert r.overall is not None  # filtered above; composite therefore never None
+    return (-(rank_composite(r) or 0.0), -r.overall.score, r.run.model)
+
+  ranked.sort(key=_sort_key)
+
+  # Partition adjacent rows whose composites are within 2 × max(std) into
+  # tie groups; within a group, order by quality only — cheaper usage never
+  # promotes a row past a better-quality model.
+  entries: list[tuple[TestReport, OverallSummary, float]] = []
+  for r in ranked:
+    assert r.overall is not None  # filtered above
+    entries.append((r, r.overall, rank_composite(r) or 0.0))
+  groups: list[list[tuple[TestReport, OverallSummary, float]]] = [[entries[0]]]
+  for entry in entries[1:]:
+    prev_entry = groups[-1][-1]
+    if abs(prev_entry[2] - entry[2]) <= 2 * max(entry[1].std, prev_entry[1].std):
+      groups[-1].append(entry)
+    else:
+      groups.append([entry])
+  ordered = [
+    entry for g in groups for entry in sorted(g, key=lambda e: (-e[1].score, e[0].run.model))
+  ]
 
   lines: list[str] = []
   lines.append(
     f"{'Rank':<5} {'Model':<24} {'Quality':>8} {'Std':>6} "
-    f"{'Tokens':>8} {'Latency':>8} {'Usage Δ':>8}"
+    f"{'Tokens':>8} {'Latency':>8} {'Usage Δ':>8} {'Weekly Δ':>9} {'Composite':>10}"
   )
-  for i, r in enumerate(ranked, 1):
-    assert r.overall is not None  # filtered above
-    o = r.overall
-    usage = (
-      f"{o.usage_delta['session']:.2f}%" if o.usage_delta and "session" in o.usage_delta else "N/A"
-    )
+  prev: tuple[float, float] | None = None  # (composite, std) of previous row
+  for i, (r, o, composite) in enumerate(ordered, 1):
+    usage = "N/A"
+    weekly = "N/A"
+    if o.usage_delta:
+      usage = f"{o.usage_delta['session']:.2f}%" if "session" in o.usage_delta else "N/A"
+      weekly = f"{o.usage_delta['weekly']:.2f}%" if "weekly" in o.usage_delta else "N/A"
+    # Composite within 2 × max(std) of the previous row's composite →
+    # statistical tie, flagged "≈"; ordering inside the tie group is
+    # quality-only (see group reorder above).
+    tie = ""
+    if prev is not None and abs(prev[0] - composite) <= 2 * max(o.std, prev[1]):
+      tie = "≈"
+    prev = (composite, o.std)
     lines.append(
-      f"{i:<5} {r.run.model:<24} {o.score:>8.3f} {o.std:>6.3f} "
-      f"{o.total_tokens:>8} {o.total_latency_s:>7.1f}s {usage:>8}"
+      f"{i:<5} {r.run.model + tie:<23} {o.score:>8.3f} {o.std:>6.3f} "
+      f"{o.total_tokens:>8} {o.total_latency_s:>7.1f}s {usage:>8} {weekly:>9} {composite:>10.4f}"
     )
 
   return "\n".join(lines)

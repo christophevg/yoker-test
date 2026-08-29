@@ -11,6 +11,7 @@ from yoker_test.report import (
   format_console_report,
   format_quality_ranking,
   print_report,
+  rank_composite,
   summarize_overall,
 )
 from yoker_test.schema import (
@@ -726,6 +727,222 @@ class TestBackwardCompatibility:
 
   def test_compute_composite_still_works(self):
     assert compute_composite(quality=0.8, cost_delta=None, n_tasks=10, n_correct=8) == 0.8
+
+
+class TestRankComposite:
+  """Tests for rank_composite — score-per-cost composite on TestReport."""
+
+  @staticmethod
+  def make_report(score: float, n_tasks: int, usage_delta=None) -> TestReport:
+    overall = _overall_summary(score=score, usage_delta=usage_delta)
+    return _test_report(
+      results=[_result() for _ in range(n_tasks)],
+      overall=overall,
+    )
+
+  def test_no_overall_returns_none(self):
+    assert rank_composite(_test_report(overall=None)) is None
+
+  def test_zero_session_usage_equals_quality(self):
+    report = self.make_report(score=0.8, n_tasks=10, usage_delta={"session": 0.0})
+    assert rank_composite(report) == 0.8
+
+  def test_none_usage_equals_quality(self):
+    report = self.make_report(score=0.8, n_tasks=10, usage_delta=None)
+    assert rank_composite(report) == 0.8
+
+  def test_zero_quality_is_zero_regardless_of_usage(self):
+    report = self.make_report(score=0.0, n_tasks=10, usage_delta={"session": 0.5})
+    assert rank_composite(report) == 0.0
+
+  def test_single_task_exact_formula(self):
+    # n_correct = 1.0 (= quality × 1 task, at the floor of the cost term):
+    # q / (1 + (u/q) × 1000) via compute_composite semantics
+    report = self.make_report(score=1.0, n_tasks=1, usage_delta={"session": 0.1})
+    expected = 1.0 / (1 + (0.1 / 1.0) * 1000)
+    assert abs(rank_composite(report) - expected) < 1e-9
+
+  def test_n_correct_below_one_means_no_cost_term(self):
+    """compute_composite gates: n_correct < 1 → cost term skipped (composite = quality)."""
+    report = self.make_report(score=0.99, n_tasks=1, usage_delta={"session": 0.1})
+    assert rank_composite(report) == 0.99
+
+  def test_high_usage_devalues_but_never_below_zero(self):
+    report = self.make_report(score=0.8, n_tasks=10, usage_delta={"session": 0.9})
+    value = rank_composite(report)
+    assert 0.0 <= value < 0.8
+
+  def test_delegates_to_compute_composite_semantics(self):
+    report = self.make_report(score=0.8, n_tasks=10, usage_delta={"session": 0.1})
+    expected = compute_composite(quality=0.8, cost_delta=0.1, n_tasks=10, n_correct=0.8 * 10)
+    assert rank_composite(report) == expected
+
+  def test_missing_session_key_treated_as_no_usage(self):
+    report = self.make_report(score=0.8, n_tasks=10, usage_delta={"weekly": 0.1})
+    assert rank_composite(report) == 0.8
+
+
+class TestSummarizeOverallComposite:
+  """summarize_overall stores the score-per-cost composite."""
+
+  def test_composite_matches_rank_composite(self):
+    results = [_result(score=1.0), _result(score=0.5)]
+    summaries = aggregate_results(results)
+    overall = summarize_overall(results, summaries, usage_delta={"session": 0.01})
+    report = _test_report(results=results, summary=summaries, overall=overall)
+    assert overall.composite == rank_composite(report)
+
+  def test_empty_results_composite_none(self):
+    overall = summarize_overall([], {})
+    assert overall.composite is None
+
+  def test_no_usage_composite_equals_score(self):
+    results = [_result(score=0.7)]
+    overall = summarize_overall(results, aggregate_results(results))
+    assert overall.composite == 0.7
+
+
+class TestFormatQualityRankingComposite:
+  """Composite-driven ranking: usage-aware ordering, identical when absent."""
+
+  @staticmethod
+  def make_report(model: str, score: float, usage_delta=None) -> TestReport:
+    return _test_report(
+      run=_run_metadata(model=model),
+      results=[_result() for _ in range(10)],
+      overall=_overall_summary(score=score, usage_delta=usage_delta),
+    )
+
+  def test_cheaper_model_can_outrank_equal_quality(self):
+    reports = [
+      self.make_report("expensive", 0.9, {"session": 0.5}),
+      self.make_report("cheap", 0.9, {"session": 0.01}),
+    ]
+    lines = format_quality_ranking(reports).strip().split("\n")
+    assert "cheap" in lines[1]
+    assert "expensive" in lines[2]
+
+  def test_ordering_identical_when_usage_absent(self):
+    reports = [
+      self.make_report("model-b", 0.5),
+      self.make_report("model-a", 0.9),
+      self.make_report("model-c", 0.9),
+    ]
+    lines = format_quality_ranking(reports).strip().split("\n")
+    assert "model-a" in lines[1]
+    assert "model-c" in lines[2]
+    assert "model-b" in lines[3]
+
+  def test_quality_still_primary_on_composite_tie(self):
+    """At exactly equal composite, higher quality ranks first."""
+    reports = [
+      self.make_report("low-q-cheap", 0.5, {"session": 0.0}),
+      self.make_report("high-q-cheap", 0.9, {"session": 0.0}),
+    ]
+    lines = format_quality_ranking(reports).strip().split("\n")
+    assert "high-q-cheap" in lines[1]
+
+  def test_weekly_delta_column_rendered(self):
+    reports = [self.make_report("m", 0.9, {"session": 0.1, "weekly": 0.4})]
+    output = format_quality_ranking(reports)
+    assert "Weekly Δ" in output
+    assert "0.40%" in output
+
+  def test_tie_within_2x_composite_proximity_flagged(self):
+    """Composite within 2 × max(std) of the previous row's composite → '≈'."""
+    reports = [
+      self.make_report("model-a", 0.90),
+      self.make_report("model-b", 0.895),
+    ]
+    output = format_quality_ranking(reports)
+    assert "model-b≈" in output  # |0.9 - 0.895| ≤ 2 × 0.03 (composites equal here)
+    assert not output.split("\n")[1].endswith("≈")  # first row never flagged
+
+  def test_composite_proximity_uses_usage_not_quality_gap(self):
+    """Quality gap far apart (0.5 vs 0.9) but composites collapse together → tie
+    flag: proximity is a composite property, not a quality property."""
+    reports = [
+      self.make_report("low-q-free", 0.50),  # composite 0.5000 (no usage)
+      self.make_report("high-q-usage", 0.90, {"session": 0.006}),  # ≈ 0.5400
+    ]
+    output = format_quality_ranking(reports)
+    lines = output.strip().split("\n")
+    assert "high-q-usage" in lines[1]  # composite 0.54 > 0.50
+    assert "low-q-free≈" in lines[2]  # |0.54 − 0.50| ≤ 2 × 0.03 despite 0.4 quality gap
+
+  def test_equal_quality_different_usage_composites_collapse_to_tie(self):
+    """Equal quality, different usage: composites close → tie flagged, order
+    stays quality-driven (equal quality → alphabetical); usage never reorders."""
+    reports = [
+      self.make_report("model-metered", 0.80, {"session": 0.0002}),  # ≈ 0.7805
+      self.make_report("model-free", 0.80),  # 0.8000
+    ]
+    output = format_quality_ranking(reports)
+    lines = output.strip().split("\n")
+    assert "Composite" in lines[0]  # composite column present
+    assert "0.8000" in lines[1] and "model-free" in lines[1]
+    assert "0.7805" in lines[2] and "model-metered≈" in lines[2]
+
+  def test_tie_group_reordered_by_quality_only(self):
+    """Pure composite sort puts the cheaper model first; inside the tie group the
+    higher-quality model ranks first — cheaper usage never promotes a row."""
+    reports = [
+      self.make_report("cheap-b", 0.79),  # composite 0.7900
+      self.make_report("pricey-a", 0.80, {"session": 0.0002}),  # ≈ 0.7805
+    ]
+    output = format_quality_ranking(reports)
+    lines = output.strip().split("\n")
+    assert "pricey-a" in lines[1]  # higher quality first within the tie group
+    assert "cheap-b≈" in lines[2]  # flagged, not promoted by cheaper usage
+
+  def test_no_tie_flag_when_composites_well_separated(self):
+    reports = [
+      self.make_report("model-a", 0.9),
+      self.make_report("model-b", 0.5),
+    ]
+    output = format_quality_ranking(reports)
+    assert "≈" not in output
+
+  def test_console_report_shows_weekly_and_composite_lines(self):
+    report = _test_report(
+      results=[_result(task_id="K1", category="knowledge", score=1.0)],
+      summary={"knowledge": _category_summary(score=1.0)},
+      overall=_overall_summary(score=0.9, usage_delta={"session": 0.1, "weekly": 0.3}),
+    )
+    report.overall.composite = 0.8997
+    output = format_console_report(report)
+    assert "Weekly Δ:   0.30%" in output
+    assert "Composite:  0.8997" in output
+
+  def test_console_report_na_for_reset_dropped_session_key(self):
+    """A session key dropped by a mid-run reset renders N/A, never 0.00%."""
+    report = _test_report(
+      results=[_result(task_id="K1", category="knowledge", score=1.0)],
+      summary={"knowledge": _category_summary(score=1.0)},
+      overall=_overall_summary(score=0.9, usage_delta={"weekly": 0.3}),
+    )
+    output = format_console_report(report)
+    assert "Usage Δ:    N/A" in output
+    assert "0.00%" not in output
+
+  def test_console_report_shows_usage_note_when_present(self):
+    report = _test_report(
+      results=[_result(task_id="K1", category="knowledge", score=1.0)],
+      summary={"knowledge": _category_summary(score=1.0)},
+      overall=_overall_summary(score=0.9, usage_delta={"weekly": 0.3}),
+    )
+    report.overall.usage_note = "session window reset mid-run"
+    output = format_console_report(report)
+    assert "Note:       session window reset mid-run" in output
+
+  def test_console_report_no_note_line_when_none(self):
+    report = _test_report(
+      results=[_result(task_id="K1", category="knowledge", score=1.0)],
+      summary={"knowledge": _category_summary(score=1.0)},
+      overall=_overall_summary(score=0.9),
+    )
+    output = format_console_report(report)
+    assert "Note:" not in output
 
   def test_print_report_still_works(self, capsys):
     task = make_task()

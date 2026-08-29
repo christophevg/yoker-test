@@ -54,6 +54,13 @@ class TestResult:
   ttft_ms: float | None = None
   scorer_name: str = ""
   sub_scores: dict[str, float] | None = None
+  # Quota-fraction deltas around this execution: {"session": Δ, "weekly": Δ}.
+  # Absent key = that window's delta was unavailable (window reset mid-test);
+  # None = usage tracking unavailable entirely. Values are noisy estimates —
+  # the server quantizes quota at 3 decimals and a failed snapshot shifts
+  # adjacent deltas. `requests_delta` is the exact per-test metric.
+  usage_delta: dict[str, float] | None = None
+  requests_delta: int | None = None
 
 
 @dataclass
@@ -114,6 +121,15 @@ class OverallSummary:
   total_latency_s: float
   avg_tokens_per_second: float
   usage_delta: dict[str, float] | None = None
+  # Human-readable annotation when something poisoned the delta (window
+  # reset, snapshot unavailable). None = nothing notable.
+  usage_note: str | None = None
+  usage_before: dict[str, float] | None = None
+  usage_after: dict[str, float] | None = None
+  requests_delta: int | None = None
+  extra_usage_cost_delta: float | None = None
+  # Score-per-cost value (see report.rank_composite); None when not computed.
+  composite: float | None = None
 
 
 @dataclass
