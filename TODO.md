@@ -28,9 +28,15 @@
 > remaining Phase 2 backlog. P2.5.1 and P2.5.2 are approved as specced
 > (but NOT yet implemented — left unchecked).
 >
-> **Execution order**: P2.5.1 → P2.5.2 → P2.5.3 → P2.5.9 → P2.5.8 →
-> P2.5.6 → P2.5.10 → P2.5.7. All quick wins and P2.5.9 have no
+> **Execution order**: P2.5.10 → P2.5.1 → P2.5.2 → P2.5.3 → P2.5.9 →
+> P2.5.8 → P2.5.6 → P2.5.7. All quick wins and P2.5.9 have no
 > dependencies; P2.5.7 is the capstone and uses everything before it.
+>
+> **Reorder reason**: P2.5.10 goes first (owner directive) — the owner
+> wants the credit-usage + score-per-cost comparison of glm-5.2:cloud
+> vs. newly released glm-5.3:cloud and glm-5.3-flash:cloud for a
+> weekend blog post timed with today's model release, promoting Yoker
+> and yoker-test.
 > Research deliverables for P2.5.4 and P2.5.5 are complete — see
 > `analysis/suite-research.md` and `analysis/sandbox-research.md`.
 
