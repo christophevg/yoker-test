@@ -12,6 +12,8 @@ This is the list of cloud-enabled models taken from the [Ollama models page](htt
 - gemma4:cloud
 - glm-5.1:cloud
 - glm-5.2:cloud
+- glm-5.3:cloud
+- glm-5.3-flash:cloud
 - gpt-oss:120b-cloud
 - gpt-oss:20b-cloud
 - kimi-k2.6:cloud
