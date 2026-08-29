@@ -22,6 +22,116 @@
     (quality ranking of Ollama cloud models using usage % as cost factor).
 
 
+### Phase 2.5: Core Quality
+
+> Intermediate quality phase requested by the owner, pulled forward from the
+> remaining Phase 2 backlog. P2.5.1 and P2.5.2 are approved as specced
+> (but NOT yet implemented — left unchecked).
+>
+> **Execution order**: P2.5.1 → P2.5.2 → P2.5.3 → P2.5.9 → P2.5.8 →
+> P2.5.6 → P2.5.10 → P2.5.7. All quick wins and P2.5.9 have no
+> dependencies; P2.5.7 is the capstone and uses everything before it.
+> Research deliverables for P2.5.4 and P2.5.5 are complete — see
+> `analysis/suite-research.md` and `analysis/sandbox-research.md`.
+
+- [ ] **P2.5.1: `--verbose` flag for full per-test detail** (Simple)
+  - Full per-test detail: complete assignment, exact raw response, full
+    evaluation info (expected vs extracted, scorer, category) — no truncation
+  - **Approved as specced**
+  - **Acceptance**: `--verbose` output shows the complete untruncated prompt,
+    exact raw response, and expected/extracted/scorer/category per test
+
+- [ ] **P2.5.2: Always-save results to `results/`** (Simple)
+  - Always save to `results/{suite}_{model}_{timestamp}.yaml` (sortable ISO
+    timestamp, colons replaced); `--output` overrides path; auto-create
+    `results/`; print save path; full TestReport persisted
+  - Future direction (explicitly NOT this phase): a "viewer"/replay tool
+    reusing the verbose formatter for saved results
+  - **Acceptance**: Every eval run leaves a
+    `results/{suite}_{model}_{timestamp}.yaml` with the full TestReport; the
+    save path is printed; `--output` overrides; `results/` auto-created
+
+- [ ] **P2.5.3: Tighten scorers** (Simple-Moderate)
+  - `count_bullet_lines`: add exact-count option (`exact: true` → 0.0 on
+    wrong count); use on medium/hard instruction tasks
+  - `tool_call_verify`: parse JSON and verify structure
+    (`{"tool": ..., "args": ...}`) instead of substring matching
+  - Update existing tests and the yoker_basic suite
+  - **Acceptance**: `exact: true` scores 0.0 on wrong count.
+    `tool_call_verify` scores 0.0 for malformed JSON or wrong structure.
+    Suite and tests updated, all passing
+
+- [ ] **P2.5.9: Harden `code_execution` sandbox** (Simple)
+  - Per `analysis/sandbox-research.md`: HumanEval-style reliability_guard —
+    nullify `os.system`, `os.remove`/`rmdir`/`removedirs`,
+    `shutil.rmtree`/`move`, `subprocess.Popen`/`call`/`run`,
+    `builtins.exit`/`quit`
+  - Strip environment variables (minimal env: PATH, HOME, TMPDIR — prevents
+    API-key leakage); run in a temp working directory as cwd
+  - Keep existing timeout; skip RLIMIT_AS on macOS
+  - Explicitly document "not a security sandbox"; stdlib only
+  - **MUST land before P2.5.7** (the new suite leans on code tasks)
+  - **Acceptance**: Code calling `os.system`/`shutil.rmtree`/`subprocess`
+    scores 0.0 without side effects; child env is minimal; execution cwd is
+    a temp dir; no external dependencies added; macOS supported (no RLIMIT_AS)
+
+- [ ] **P2.5.8: Enrich post-run report** (Simple-Moderate)
+  - Response preview, expected vs extracted column, error/refusal summary,
+    per-category score distribution (e.g. "8/8 perfect, 2 partial, 1 fail")
+  - Feeds the calibration loop's visibility (P2.5.7)
+  - **Acceptance**: Report shows response preview, expected vs extracted,
+    error/refusal summary, and per-category score distribution
+
+- [ ] **P2.5.6: Multi-turn conversation support** (Moderate)
+  - Pulled forward from P2.16. Optional `turns: list[{role, content}]` on
+    TestTask; runner sends sequentially, captures full exchange in
+    TestResult.messages; scorers receive full messages for multi-turn tasks
+    (backward compatible: single-turn scorers get last response); loader
+    parses `turns`; verbose + saved results show full exchange
+  - Enables the genuinely challenging multi-step tasks
+  - **Acceptance**: Multi-turn tasks execute correctly with the full
+    exchange captured in `messages`; single-turn behavior unchanged; YAML
+    `turns` parses and validates; verbose and saved results show full
+    exchange
+
+- [ ] **P2.5.10: Ollama credit usage statistics + score-per-cost ranking** (Moderate)
+  - (a) Research how Ollama exposes credit/usage data for cloud models;
+    evaluate current wiring of `usage.py`'s `fetch_ollama_usage` (extracted
+    in P1.3) into the eval flow
+  - (b) Capture per-test and aggregate credit usage; persist in saved results
+  - (c) Add a score/cost ranking composite (result-per-cost). Exact combining
+    formula must be researched and reasoned (options: raw ratio, normalized
+    per-category, weighted composite) — delegate research to researcher
+    agent, then implement
+  - Rationale: e.g. glm-5.3-flash may score well at low cost → high
+    overall value
+  - **Acceptance**: Credit usage researched and documented; per-test and
+    aggregate credit usage captured and persisted in saved results;
+    score-per-cost ranking in the report; formula choice documented with
+    reasoning
+
+- [ ] **P2.5.7: Design and create the improved hard suite** (Moderate-Complex)
+  - Informed by `analysis/suite-research.md`; design doc at
+    `analysis/suite-design.md`
+  - Elements: 10-choice expert-level MCQ (MMLU-Pro style, guessing floor
+    10%); multi-step reasoning with exact-match final answers (MATH Level-5
+    style); outcome-based code tasks with edge cases (strict
+    code_execution); strict instruction compliance with 0.0 on violation
+    (IFEval style); structured tool-call verification; multi-turn
+    context-retention tasks (built on P2.5.6)
+  - **Hard acceptance criteria — calibration loop**: refresh
+    `docs/models.md` first; calibrate with reference models top=
+    `glm-5.2:cloud`, mid=`qwen3.5:397b-cloud`, low=`gpt-oss:20b-cloud`
+    (note: glm-5.3:cloud is newly available and may replace glm-5.2 as top
+    reference); target 40–80% spread between strong and weak models,
+    ≥15 points spread per category; any task where the top model scores
+    ≥0.90 across repeats is deleted or tightened; strong model must NOT
+    score 1.0 across all categories
+  - **Acceptance**: Design doc at `analysis/suite-design.md`; suite
+    validates; calibration runs show the target spread; no task scores the
+    top model ≥0.90 across repeats; strong model not perfect across all
+    categories
+
 #### P2.10: Baseline registry
 
 - [ ] **P2.10: Implement baseline registry for regression comparison**
@@ -91,7 +201,11 @@
   - **Satisfies**: FR15
   - **Acceptance**: Reference model set documented. `--reference-models` runs eval against all three models. Results comparable across models. Documentation explains rationale and deterministic preference
 
-#### P2.16: Multi-turn conversation support
+#### P2.16: Multi-turn conversation support (PULLED FORWARD — see Phase 2.5, P2.5.6)
+
+> This task was pulled forward into Phase 2.5 as **P2.5.6**, which supersedes
+> it. Kept here as a stub to avoid double implementation; the detailed spec
+> below remains valid for P2.5.6. Remove this stub when P2.5.6 lands.
 
 - [ ] **P2.16: Implement multi-turn conversation support in runner and suite format**
   - Extend `TestTask` to support multi-turn conversations: add optional `turns: list[dict]` field (list of `{"role": "user"/"assistant", "content": "..."}` messages). When `turns` is present, the runner sends them sequentially, collecting the full message exchange. When absent, falls back to single-turn `prompt` behavior.
@@ -198,6 +312,17 @@
   - **Acceptance** (when un-deferred): `load_pricing` returns dict with model entries. `compute_cost` returns correct cost for known model, 0.0 for local/unknown. `compute_cost_per_correct` handles zero score. Tests cover known/unknown/local models, zero tokens, zero correct
 
 ## Done
+
+### Phase 2.5: Core Quality (research deliverables)
+
+- [x] **P2.5.4: Research LLM evaluation frameworks** (2026-08-27)
+  - Research for the improved hard suite completed. Full sourced report
+    recovered from a lost session and archived at
+    `analysis/suite-research.md` (informs P2.5.7)
+- [x] **P2.5.5: Research Python code execution sandboxing** (2026-08-27)
+  - Sandbox hardening research completed. Full sourced report recovered from
+    a lost session and archived at `analysis/sandbox-research.md` (informs
+    P2.5.9)
 
 ### Phase 1: Extract monolith into clean submodules
 
