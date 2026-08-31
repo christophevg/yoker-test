@@ -623,6 +623,36 @@ class TestEvalRunnerRun:
 
     assert report.results[0].expected == "C"
 
+  async def test_verbose_streams_detail_block_to_stderr(self, capsys):
+    """verbose=True renders the full detail block after the progress line."""
+    task = make_task(expected="C")
+    task.prompt = "What is 2+2?"
+    runner = EvalRunner(tasks=[task], repeats=1)
+
+    mock_agent = make_mock_agent("C")
+
+    with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
+      await runner.run("test-model", make_mock_config(), verbose=True)
+
+    err = capsys.readouterr().err
+    assert "[1/1] K1 r0... " in err
+    assert "score=1.0" in err
+    assert "Prompt:\n    What is 2+2?" in err
+    assert "Expected:   'C'" in err
+    assert err.index("score=") < err.index("Prompt:")
+
+  async def test_no_verbose_leaves_progress_output_unchanged(self, capsys):
+    runner = EvalRunner(tasks=[make_task(expected="C")], repeats=1)
+
+    mock_agent = make_mock_agent("C")
+
+    with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
+      await runner.run("test-model", make_mock_config())
+
+    err = capsys.readouterr().err
+    assert "score=1.0" in err
+    assert "Prompt:" not in err and "Expected:" not in err and "Category:" not in err
+
   async def test_difficulty_stored_in_result(self):
     task = make_task(expected="C")
     task.difficulty = "hard"

@@ -15,7 +15,7 @@ import yoker
 from yoker.backends import create_backend
 from yoker.events import Event, EventCallback, EventType, TurnEndEvent
 
-from yoker_test.report import aggregate_results, summarize_overall
+from yoker_test.report import aggregate_results, format_test_detail, summarize_overall
 from yoker_test.schema import RunMetadata, TestReport, TestResult, TestTask
 from yoker_test.scorers import SCORERS, normalize_score_result
 from yoker_test.usage import fetch_usage_metrics
@@ -206,12 +206,14 @@ class EvalRunner:
     self._suite_version = suite_version
     self._weights = aggregation_weights
 
-  async def run(self, model: str, config: Any) -> TestReport:
+  async def run(self, model: str, config: Any, verbose: bool = False) -> TestReport:
     """Execute all tasks × repeats, return a TestReport.
 
     Args:
       model: The model identifier to evaluate.
       config: A yoker Config instance (typed as Any to avoid hard dependency).
+      verbose: Stream a full detail block per test to stderr after its
+        progress line, in addition to the compact score only.
 
     Returns:
       TestReport with results, metadata, category summaries, and overall.
@@ -283,6 +285,8 @@ class EvalRunner:
           print(f"FAIL ({result.error})", file=sys.stderr)
         else:
           print(f"score={result.score:.1f}", file=sys.stderr)
+        if verbose:
+          print("\n".join(format_test_detail(result)), file=sys.stderr)
 
     metadata = self._build_metadata(model, config)
     summary = aggregate_results(results, self._weights)
