@@ -148,6 +148,10 @@ class TestTestResult:
     )
     assert result.error == "Connection timeout"
 
+  def test_expected_defaults_to_none(self):
+    result = TestResult(task_id="K1", category="knowledge", score=0.0, response="")
+    assert result.expected is None
+
   def test_extracted_can_be_none(self):
     result = TestResult(
       task_id="K1", category="knowledge", score=0.0, response="I don't know", extracted=None
