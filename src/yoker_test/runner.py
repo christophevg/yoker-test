@@ -160,6 +160,7 @@ async def run_single_test(task: TestTask, config: Any, backend: Any = None) -> T
     content_chars=collector.content_chars,
     error=error,
     sub_scores=sub_scores,
+    expected=task.expected,
   )
 
 
@@ -350,6 +351,7 @@ class EvalRunner:
           difficulty=task.difficulty,
           repeat=repeat,
           prompt=task.prompt,
+          expected=task.expected,
           tokens_in=tokens_in,
           tokens_out=tokens_out,
           latency_ms=latency_ms,
@@ -383,6 +385,7 @@ class EvalRunner:
         difficulty=task.difficulty,
         repeat=repeat,
         prompt=task.prompt,
+        expected=task.expected,
         scorer_name=scorer_name,
         sub_scores=sub_scores,
         ttft_ms=ttft,
@@ -397,6 +400,7 @@ class EvalRunner:
         difficulty=task.difficulty,
         repeat=repeat,
         prompt=task.prompt,
+        expected=task.expected,
       )
     finally:
       await agent.aclose()

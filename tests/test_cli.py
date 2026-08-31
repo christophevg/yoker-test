@@ -115,7 +115,7 @@ class TestEvalSubcommandParsing:
       patch("sys.exit"),
     ):
       main()
-      mock_cmd.assert_called_once_with("my_suite", "glm-5.2:cloud", None, None, None, [])
+      mock_cmd.assert_called_once_with("my_suite", "glm-5.2:cloud", None, None, None, [], False)
 
 
 class TestSuitesSubcommandParsing:
@@ -166,7 +166,7 @@ class TestBackwardCompat:
       patch("sys.exit"),
     ):
       main()
-      mock_cmd.assert_called_once_with("yoker_basic", "gpt-4", None, None, None)
+      mock_cmd.assert_called_once_with("yoker_basic", "gpt-4", None, None, None, verbose=False)
 
   def test_no_args_prints_help_and_exits(self, capsys):
     with (
@@ -262,6 +262,71 @@ class TestCmdEval:
       mock_ev.assert_called_once_with(
         suite="my_suite", model="gpt-4", compare="baseline.yaml", repeats=None
       )
+
+
+class TestVerboseFlag:
+  """Tests for --verbose wiring on eval and the legacy --model path."""
+
+  def test_eval_verbose_flag_parses(self):
+    with (
+      patch("yoker_test.cli.cmd_eval", new_callable=AsyncMock, return_value=0) as mock_cmd,
+      patch("yoker_test.cli.asyncio.run", side_effect=lambda coro: coro),
+      patch("sys.argv", ["yoker-test", "eval", "--suite", "my_suite", "--verbose"]),
+      patch("sys.exit"),
+    ):
+      main()
+      assert mock_cmd.call_args.args[-1] is True
+
+  def test_legacy_model_verbose_flag(self):
+    """--model X --verbose dispatches with verbose=True via legacy_verbose dest."""
+    with (
+      patch("yoker_test.cli.cmd_eval", new_callable=AsyncMock, return_value=0) as mock_cmd,
+      patch("yoker_test.cli.asyncio.run", side_effect=lambda coro: coro),
+      patch("sys.argv", ["yoker-test", "--model", "gpt-4", "--verbose"]),
+      patch("sys.exit"),
+    ):
+      main()
+      assert mock_cmd.call_args.kwargs["verbose"] is True
+
+  def test_default_verbose_false_both_paths(self):
+    with (
+      patch("yoker_test.cli.cmd_eval", new_callable=AsyncMock, return_value=0) as mock_cmd,
+      patch("yoker_test.cli.asyncio.run", side_effect=lambda coro: coro),
+      patch("sys.argv", ["yoker-test", "eval", "--suite", "my_suite"]),
+      patch("sys.exit"),
+    ):
+      main()
+      assert mock_cmd.call_args.args[-1] is False
+
+  def test_subparser_default_does_not_clobber(self):
+    """Legacy --model --verbose followed by eval subcommand: the eval parser's
+    --verbose default must not reset the flag (dest-collision regression)."""
+    with (
+      patch("yoker_test.cli.cmd_eval", new_callable=AsyncMock, return_value=0) as mock_cmd,
+      patch("yoker_test.cli.asyncio.run", side_effect=lambda coro: coro),
+      patch("sys.argv", ["yoker-test", "--verbose", "--model", "gpt-4"]),
+      patch("sys.exit"),
+    ):
+      main()
+      assert mock_cmd.call_args.kwargs["verbose"] is True
+
+  async def test_cmd_eval_passes_per_test_detail_when_verbose(self, capsys):
+    mock_report = _mock_report()
+    with (
+      patch("yoker_test.cli.evaluate", new_callable=AsyncMock, return_value=mock_report),
+      patch("yoker_test.cli.format_console_report", return_value="") as mock_fmt,
+    ):
+      await cmd_eval("my_suite", "gpt-4", None, None, None, verbose=True)
+      mock_fmt.assert_called_once_with(mock_report, per_test_detail=True)
+
+  async def test_cmd_eval_default_no_per_test_detail(self, capsys):
+    mock_report = _mock_report()
+    with (
+      patch("yoker_test.cli.evaluate", new_callable=AsyncMock, return_value=mock_report),
+      patch("yoker_test.cli.format_console_report", return_value="") as mock_fmt,
+    ):
+      await cmd_eval("my_suite", "gpt-4", None, None, None)
+      mock_fmt.assert_called_once_with(mock_report, per_test_detail=False)
 
 
 class TestCmdSuites:

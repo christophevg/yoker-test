@@ -10,6 +10,7 @@ from yoker_test.report import (
   compute_composite,
   format_console_report,
   format_quality_ranking,
+  format_test_detail,
   print_report,
   rank_composite,
   summarize_overall,
@@ -631,6 +632,167 @@ class TestFormatConsoleReport:
     )
     output = format_console_report(report)
     assert "No category summaries available." in output
+
+
+def _detail_result(prompt: str = "multi\nline\nprompt", response: str = "raw") -> TestResult:
+  return TestResult(
+    task_id="R1",
+    category="reasoning",
+    score=1.0,
+    response=response,
+    extracted="b",
+    tokens_in=65,
+    tokens_out=120,
+    latency_ms=2800.0,
+    difficulty="easy",
+    repeat=0,
+    prompt=prompt,
+    expected="b",
+    scorer_name="mcq",
+  )
+
+
+class TestFormatTestDetail:
+  """Tests for format_test_detail — verbose block per test result."""
+
+  def test_full_block_shows_all_fields_untruncated(self):
+    prompt = "Line one of a long prompt.\nmiddle line that is distinctive.\nFinal line 42."
+    result = _result()
+    result.prompt = prompt
+    result.response = "The answer is b, chosen carefully."
+    result.expected = "b"
+    result.extracted = "b"
+    result.scorer_name = "mcq"
+    lines = format_test_detail(result)
+    text = "\n".join(lines)
+    # First and last distinctive prompt lines both present → no truncation.
+    assert "Line one of a long prompt." in text
+    assert "Final line 42." in text
+    assert "chosen carefully" in text  # exact raw response
+    assert "Expected:   'b'" in text
+    assert "Extracted:  'b'" in text
+    assert "Scorer:     mcq" in text
+    assert "Category:   knowledge" in text
+    assert "Score:      1.0" in text
+
+  def test_header_line_carries_compact_fields(self):
+    result = _result(task_id="R1", difficulty="easy", repeat=0, score=1.0)
+    result.tokens_in, result.tokens_out, result.latency_ms = 65, 120, 2800.0
+    header = format_test_detail(result)[0]
+    assert "R1" in header and "easy" in header and "r0" in header
+    assert "score=1.0" in header and "tokens=65+120" in header and "latency=2800ms" in header
+
+  def test_multi_line_content_fenced_with_indentation(self):
+    result = _result()
+    result.prompt = "line1\nline2"
+    result.response = "resp1\nresp2"
+    lines = format_test_detail(result)
+    text = "\n".join(lines)
+    assert "  Prompt:" in text
+    assert "    line1\n    line2" in text
+    assert "  Response:" in text
+    assert "    resp1\n    resp2" in text
+
+  def test_empty_response_renders_empty_block(self):
+    result = _result()
+    result.response = ""
+    lines = format_test_detail(result)
+    idx = lines.index("  Response:")
+    assert lines[idx + 1] == ""
+
+  def test_empty_scorer_name_shows_not_scored(self):
+    result = _result()
+    result.scorer_name = ""
+    assert "Scorer:     (not scored)" in "\n".join(format_test_detail(result))
+
+  def test_set_scorer_name_rendered(self):
+    result = _result()
+    result.scorer_name = "mcq"
+    assert "Scorer:     mcq" in "\n".join(format_test_detail(result))
+
+  def test_error_line_when_present(self):
+    result = _result(error="Connection failed")
+    text = "\n".join(format_test_detail(result))
+    assert "Error:      Connection failed" in text
+
+  def test_no_error_line_when_none(self):
+    assert not any(line.startswith("  Error:") for line in format_test_detail(_result()))
+
+  def test_sub_scores_rendered_when_present(self):
+    result = _result()
+    result.sub_scores = {"exact": 1.0, "partial": 0.5}
+    text = "\n".join(format_test_detail(result))
+    assert "Sub-scores: exact=1.0  partial=0.5" in text
+
+  def test_no_sub_scores_line_when_absent(self):
+    assert not any(line.startswith("  Sub-scores:") for line in format_test_detail(_result()))
+
+
+class TestFormatConsoleReportVerbose:
+  """Tests for format_console_report(per_test_detail=True)."""
+
+  def test_default_output_unchanged(self):
+    """per_test_detail defaults to False → output identical to pre-change behavior."""
+    report = _test_report(
+      results=[_result(task_id="K1", category="knowledge", score=1.0)],
+      summary={"knowledge": _category_summary(score=0.75)},
+      overall=_overall_summary(score=0.75),
+    )
+    assert format_console_report(report) == format_console_report(report, per_test_detail=False)
+    # Spot-check the canonical compact line shape survived the extension.
+    assert "  K1       easy   r0  score=1.0  tokens=100+50  latency=500ms" in format_console_report(
+      report
+    )
+
+  def test_blocks_appear_in_verbose(self):
+    result = _result(task_id="K1", category="knowledge", score=1.0)
+    result.prompt = "full prompt"
+    result.response = "raw response"
+    report = _test_report(results=[result])
+    output = format_console_report(report, per_test_detail=True)
+    assert "Prompt:\n    full prompt" in output
+    assert "Response:\n    raw response" in output
+
+  def test_compact_line_absent_verbose(self):
+    report = _test_report(results=[_result()])
+    compact = format_console_report(report)
+    verbose = format_console_report(report, per_test_detail=True)
+    compact_line = next(line for line in compact.split("\n") if line.startswith("  K1"))
+    assert compact_line not in verbose.split("\n")
+
+  def test_non_task_sections_identical_both_modes(self):
+    report = _test_report(
+      results=[_result(task_id="K1", category="knowledge", score=1.0)],
+      summary={"knowledge": _category_summary(score=0.75)},
+      overall=_overall_summary(score=0.75, usage_delta={"session": 0.1}),
+    )
+    plain = format_console_report(report)
+    verbose = format_console_report(report, per_test_detail=True)
+
+    def sections(text: str, start: str) -> list[str]:
+      lines = text.split("\n")
+      i = next(idx for idx, line in enumerate(lines) if line.startswith(start))
+      return lines[i:]
+
+    assert "\n".join(sections(plain, "Category")) == "\n".join(sections(verbose, "Category"))
+    assert "\n".join(sections(plain, "Overall")) == "\n".join(sections(verbose, "Overall"))
+
+  def test_blocks_grouped_by_category_like_compact(self):
+    report = _test_report(
+      results=[
+        _result(task_id="K1", category="knowledge"),
+        _result(task_id="R1", category="reasoning"),
+      ],
+    )
+    output = format_console_report(report, per_test_detail=True)
+    assert output.index("[knowledge]") < output.index("[reasoning]")
+    assert output.count("── ") == 2
+
+  def test_untruncated_prompt_in_full_report(self):
+    result = _result()
+    result.prompt = "start-marker\n" + "filler\n" * 20 + "end-marker"
+    output = format_console_report(_test_report(results=[result]), per_test_detail=True)
+    assert "start-marker" in output and "end-marker" in output
 
 
 class TestFormatQualityRanking:

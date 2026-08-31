@@ -112,7 +112,7 @@ class TestWithFlag:
     ):
       main()
       mock_cmd.assert_called_once_with(
-        "my_suite", "glm-5.2:cloud", None, None, None, ["/some/path"]
+        "my_suite", "glm-5.2:cloud", None, None, None, ["/some/path"], False
       )
 
   def test_with_flag_multiple(self):
@@ -129,7 +129,9 @@ class TestWithFlag:
       patch("sys.exit"),
     ):
       main()
-      mock_cmd.assert_called_once_with("my_suite", "glm-5.2:cloud", None, None, None, ["/a", "/b"])
+      mock_cmd.assert_called_once_with(
+        "my_suite", "glm-5.2:cloud", None, None, None, ["/a", "/b"], False
+      )
 
   async def test_cmd_eval_adds_with_paths_to_sys_path(self):
     """cmd_eval adds --with paths to sys.path."""

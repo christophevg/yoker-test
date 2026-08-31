@@ -17,6 +17,7 @@ async def cmd_eval(
   output: str | None,
   repeats: int | None,
   with_paths: list[str] | None = None,
+  verbose: bool = False,
 ) -> int:
   """Run an evaluation suite and print/save the report."""
   for p in with_paths or []:
@@ -29,7 +30,7 @@ async def cmd_eval(
     print(f"Error: {e}", file=sys.stderr)
     return 1
 
-  print(format_console_report(report))
+  print(format_console_report(report, per_test_detail=verbose))
 
   if output is not None:
     path = Path(output)
@@ -126,6 +127,14 @@ def main() -> None:
     default=None,
     help="Model to test (backward compat: runs yoker_basic suite)",
   )
+  # --verbose for the legacy --model path; distinct dest avoids the argparse
+  # wart where subparser defaults clobber the top-level namespace value.
+  parser.add_argument(
+    "--verbose",
+    dest="legacy_verbose",
+    action="store_true",
+    help="Show full per-test detail (legacy --model path only)",
+  )
   subparsers = parser.add_subparsers(dest="command")
 
   eval_parser = subparsers.add_parser("eval", help="Run an evaluation suite")
@@ -147,6 +156,9 @@ def main() -> None:
     default=[],
     help="Add a directory to sys.path before loading the suite (can be repeated)",
   )
+  eval_parser.add_argument(
+    "--verbose", action="store_true", help="Show full per-test detail (untruncated)"
+  )
 
   subparsers.add_parser("suites", help="List available test suites")
 
@@ -165,6 +177,7 @@ def main() -> None:
           args.output,
           args.repeats,
           args.with_paths,
+          args.verbose,
         )
       )
     )
@@ -173,7 +186,8 @@ def main() -> None:
   elif args.command == "show":
     sys.exit(cmd_show(args.suite))
   elif args.model is not None:
-    sys.exit(asyncio.run(cmd_eval("yoker_basic", args.model, None, None, None)))
+    verbose = args.legacy_verbose
+    sys.exit(asyncio.run(cmd_eval("yoker_basic", args.model, None, None, None, verbose=verbose)))
   else:
     parser.print_help()
     sys.exit(1)

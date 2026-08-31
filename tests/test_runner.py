@@ -612,6 +612,17 @@ class TestEvalRunnerRun:
 
     assert report.results[0].prompt == "What is 2+2?"
 
+  async def test_expected_stored_in_result(self):
+    task = make_task(expected="C")
+    runner = EvalRunner(tasks=[task], repeats=1)
+
+    mock_agent = make_mock_agent("C")
+
+    with patch("yoker_test.runner.yoker.agent", return_value=mock_agent):
+      report = await runner.run("test-model", make_mock_config())
+
+    assert report.results[0].expected == "C"
+
   async def test_difficulty_stored_in_result(self):
     task = make_task(expected="C")
     task.difficulty = "hard"

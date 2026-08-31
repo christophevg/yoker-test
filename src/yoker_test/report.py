@@ -2,6 +2,7 @@
 
 import math
 import statistics
+import textwrap
 from collections import defaultdict
 
 from yoker_test.schema import (
@@ -279,12 +280,48 @@ def compare_baseline(current: TestReport, baseline: TestReport) -> ComparisonRep
   return ComparisonReport(baseline=baseline.run, delta=delta, flagged=flagged)
 
 
-def format_console_report(report: TestReport) -> str:
+def format_test_detail(result: TestResult) -> list[str]:
+  """Return the verbose detail block lines for one test result.
+
+  Full detail, no truncation: audit-copied prompt and exact raw response are
+  rendered as fenced blocks (every line indented 4 spaces), followed by
+  expected/extracted/scorer/category/score. Scorer shows "(not scored)" when
+  nothing was scored (refusal/error paths). Sub-scores and error lines are
+  conditional.
+  """
+  header = (
+    f"  ── {result.task_id:<8} {result.difficulty:<6} r{result.repeat} ─ "
+    f"score={result.score:.1f}  tokens={result.tokens_in or 0}+{result.tokens_out or 0}  "
+    f"latency={result.latency_ms:.0f}ms "
+  )
+  lines = [f"{header}{'─' * max(80 - len(header), 3)}"]
+
+  lines.append("  Prompt:")
+  lines.append(textwrap.indent(result.prompt, "    "))
+  lines.append("  Response:")
+  lines.append(textwrap.indent(result.response, "    "))
+  lines.append(f"  Expected:   {result.expected!r}")
+  lines.append(f"  Extracted:  {result.extracted!r}")
+  scorer = result.scorer_name if result.scorer_name else "(not scored)"
+  lines.append(f"  Scorer:     {scorer}")
+  lines.append(f"  Category:   {result.category}")
+  lines.append(f"  Score:      {result.score}")
+  if result.sub_scores:
+    pairs = "  ".join(f"{k}={v}" for k, v in result.sub_scores.items())
+    lines.append(f"  Sub-scores: {pairs}")
+  if result.error:
+    lines.append(f"  Error:      {result.error}")
+  return lines
+
+
+def format_console_report(report: TestReport, *, per_test_detail: bool = False) -> str:
   """Format a TestReport as a multi-section plain text string.
 
   Sections: header, per-task detail (grouped by category), category summaries
   table, overall summary, comparison (if present). Returns the string without
-  printing.
+  printing. With per_test_detail=True the compact per-task lines are replaced
+  by full detail blocks (format_test_detail) — no truncation of prompt or
+  response. All other sections are identical in both modes.
   """
   lines: list[str] = []
 
@@ -308,12 +345,15 @@ def format_console_report(report: TestReport) -> str:
     for cat in sorted(by_category.keys()):
       lines.append(f"[{cat}]")
       for r in by_category[cat]:
-        err = " ERR" if r.error else ""
-        lines.append(
-          f"  {r.task_id:<8} {r.difficulty:<6} r{r.repeat}  "
-          f"score={r.score:.1f}  tokens={r.tokens_in or 0}+{r.tokens_out or 0}  "
-          f"latency={r.latency_ms:.0f}ms{err}"
-        )
+        if per_test_detail:
+          lines.extend(format_test_detail(r))
+        else:
+          err = " ERR" if r.error else ""
+          lines.append(
+            f"  {r.task_id:<8} {r.difficulty:<6} r{r.repeat}  "
+            f"score={r.score:.1f}  tokens={r.tokens_in or 0}+{r.tokens_out or 0}  "
+            f"latency={r.latency_ms:.0f}ms{err}"
+          )
       lines.append("")
 
   # Category summaries

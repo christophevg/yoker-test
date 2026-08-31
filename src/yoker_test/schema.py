@@ -61,6 +61,9 @@ class TestResult:
   # adjacent deltas. `requests_delta` is the exact per-test metric.
   usage_delta: dict[str, float] | None = None
   requests_delta: int | None = None
+  # Audit copy from the task (like prompt/difficulty/scorer_name): keeps the
+  # report self-sufficient for the verbose formatter and serialized output.
+  expected: Any = None
 
 
 @dataclass
