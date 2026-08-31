@@ -25,12 +25,15 @@ async def cmd_eval(
       sys.path.insert(0, p)
 
   try:
-    report = await evaluate(suite=suite, model=model, compare=compare, repeats=repeats)
+    report = await evaluate(
+      suite=suite, model=model, compare=compare, repeats=repeats, verbose=verbose
+    )
   except (FileNotFoundError, ValueError) as e:
     print(f"Error: {e}", file=sys.stderr)
     return 1
 
-  print(format_console_report(report, per_test_detail=verbose))
+  # Detail already streamed live (stderr) when verbose; final report stays compact.
+  print(format_console_report(report))
 
   if output is not None:
     path = Path(output)

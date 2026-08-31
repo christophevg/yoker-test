@@ -251,7 +251,9 @@ class TestCmdEval:
       "yoker_test.cli.evaluate", new_callable=AsyncMock, return_value=mock_report
     ) as mock_ev:
       await cmd_eval("my_suite", "gpt-4", None, None, repeats=5)
-      mock_ev.assert_called_once_with(suite="my_suite", model="gpt-4", compare=None, repeats=5)
+      mock_ev.assert_called_once_with(
+        suite="my_suite", model="gpt-4", compare=None, repeats=5, verbose=False
+      )
 
   async def test_compare_passed_through(self):
     mock_report = _mock_report()
@@ -260,7 +262,7 @@ class TestCmdEval:
     ) as mock_ev:
       await cmd_eval("my_suite", "gpt-4", "baseline.yaml", None, None)
       mock_ev.assert_called_once_with(
-        suite="my_suite", model="gpt-4", compare="baseline.yaml", repeats=None
+        suite="my_suite", model="gpt-4", compare="baseline.yaml", repeats=None, verbose=False
       )
 
 
@@ -311,22 +313,25 @@ class TestVerboseFlag:
       assert mock_cmd.call_args.kwargs["verbose"] is True
 
   async def test_cmd_eval_passes_per_test_detail_when_verbose(self, capsys):
+    """Verbose goes to evaluate() (live streaming); final report stays compact."""
     mock_report = _mock_report()
     with (
-      patch("yoker_test.cli.evaluate", new_callable=AsyncMock, return_value=mock_report),
+      patch("yoker_test.cli.evaluate", new_callable=AsyncMock, return_value=mock_report) as mock_ev,
       patch("yoker_test.cli.format_console_report", return_value="") as mock_fmt,
     ):
       await cmd_eval("my_suite", "gpt-4", None, None, None, verbose=True)
-      mock_fmt.assert_called_once_with(mock_report, per_test_detail=True)
+      assert mock_ev.call_args.kwargs["verbose"] is True
+      mock_fmt.assert_called_once_with(mock_report)
 
   async def test_cmd_eval_default_no_per_test_detail(self, capsys):
     mock_report = _mock_report()
     with (
-      patch("yoker_test.cli.evaluate", new_callable=AsyncMock, return_value=mock_report),
+      patch("yoker_test.cli.evaluate", new_callable=AsyncMock, return_value=mock_report) as mock_ev,
       patch("yoker_test.cli.format_console_report", return_value="") as mock_fmt,
     ):
       await cmd_eval("my_suite", "gpt-4", None, None, None)
-      mock_fmt.assert_called_once_with(mock_report, per_test_detail=False)
+      assert mock_ev.call_args.kwargs["verbose"] is False
+      mock_fmt.assert_called_once_with(mock_report)
 
 
 class TestCmdSuites:

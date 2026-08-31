@@ -72,11 +72,13 @@ async def evaluate(
   *,
   config: Config | None = None,
   repeats: int | None = None,
+  verbose: bool = False,
 ) -> TestReport:
   """Run an evaluation suite and return a TestReport.
 
   Loads and validates the suite, creates an EvalRunner, executes it
   through Yoker, and optionally compares against a baseline report.
+  With verbose=True, the runner streams a detail block per test to stderr.
 
   Note: mutates ``config.backend.config.model`` in place.
   """
@@ -104,7 +106,7 @@ async def evaluate(
     suite_version=suite_config.version,
     aggregation_weights=suite_config.aggregation_weights,
   )
-  report = await runner.run(model, config)
+  report = await runner.run(model, config, verbose=verbose)
 
   if compare is not None:
     baseline = _load_baseline(compare)

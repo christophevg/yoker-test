@@ -280,6 +280,21 @@ class TestEvaluate:
 
     assert mock_config.backend.config.model == "test-model"
 
+  async def test_evaluate_forwards_verbose_to_runner(self, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    self._make_suite_yaml(tmp_path)
+    mock_config = self._make_mock_config()
+    mock_report = self._make_mock_report()
+
+    with patch("yoker_test.config.EvalRunner") as mock_runner_cls:
+      mock_runner = MagicMock()
+      mock_runner.run = AsyncMock(return_value=mock_report)
+      mock_runner_cls.return_value = mock_runner
+
+      await evaluate("test_suite", "test-model", config=mock_config, verbose=True)
+
+    assert mock_runner.run.call_args.kwargs["verbose"] is True
+
   async def test_evaluate_with_repeats_override(self, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     self._make_suite_yaml(tmp_path)
