@@ -46,6 +46,9 @@
   - **Approved as specced**
   - **Acceptance**: `--verbose` output shows the complete untruncated prompt,
     exact raw response, and expected/extracted/scorer/category per test
+  - **Pending review**: PR #11 (feature/p2.5.1-verbose) — implemented on the
+    owner-approved plan, review cycle round 0 approved after polish, 439
+    tests, make check green; awaiting owner review + merge
 
 - [ ] **P2.5.2: Always-save results to `results/`** (Simple)
   - Always save to `results/{suite}_{model}_{timestamp}.yaml` (sortable ISO
