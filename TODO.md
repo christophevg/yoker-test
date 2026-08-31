@@ -40,15 +40,6 @@
 > Research deliverables for P2.5.4 and P2.5.5 are complete — see
 > `analysis/suite-research.md` and `analysis/sandbox-research.md`.
 
-- [ ] **P2.5.1: `--verbose` flag for full per-test detail** (Simple)
-  - Full per-test detail: complete assignment, exact raw response, full
-    evaluation info (expected vs extracted, scorer, category) — no truncation
-  - **Approved as specced**
-  - **Acceptance**: `--verbose` output shows the complete untruncated prompt,
-    exact raw response, and expected/extracted/scorer/category per test
-  - **Pending review**: PR #11 (feature/p2.5.1-verbose) — implemented on the
-    owner-approved plan, review cycle round 0 approved after polish, 439
-    tests, make check green; awaiting owner review + merge
 
 - [ ] **P2.5.2: Always-save results to `results/`** (Simple)
   - Always save to `results/{suite}_{model}_{timestamp}.yaml` (sortable ISO
@@ -305,6 +296,19 @@
   - **Acceptance** (when un-deferred): `load_pricing` returns dict with model entries. `compute_cost` returns correct cost for known model, 0.0 for local/unknown. `compute_cost_per_correct` handles zero score. Tests cover known/unknown/local models, zero tokens, zero correct
 
 ## Done
+
+### Phase 2.5: Core Quality
+
+- [x] **P2.5.1: `--verbose` flag for full per-test detail** (2026-08-31)
+  - `TestResult.expected` added (audit-copy) and populated at all four runner
+    construction sites; `format_test_detail` pure helper + keyword-only
+    `per_test_detail` on `format_console_report` (library API); `--verbose` on
+    eval + top-level parsers (distinct `legacy_verbose` dest, collision
+    regression-tested). **Owner feedback round**: verbose detail now STREAMS
+    to stderr per test during the run (was final-report-only) — owner
+    re-tested and approved. Final report stays compact; `--output` files
+    unchanged. Scoped review cycles (round 0 + round 1) all PASS; 442 tests,
+    make check green. **Merged via PR #11** (squash 2f1d89e)
 
 ### Phase 2.5: Core Quality (research deliverables)
 
