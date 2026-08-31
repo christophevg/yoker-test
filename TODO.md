@@ -100,23 +100,6 @@
     `turns` parses and validates; verbose and saved results show full
     exchange
 
-- [ ] **P2.5.10: Ollama credit usage statistics + score-per-cost ranking** (Moderate)
-  - **Status**: implemented on branch feature/p2.5.10-credit-usage, PR #10 (draft) — pending owner review; backend-injection revision approved on PR
-  - (a) Research how Ollama exposes credit/usage data for cloud models;
-    evaluate current wiring of `usage.py`'s `fetch_ollama_usage` (extracted
-    in P1.3) into the eval flow
-  - (b) Capture per-test and aggregate credit usage; persist in saved results
-  - (c) Add a score/cost ranking composite (result-per-cost). Exact combining
-    formula must be researched and reasoned (options: raw ratio, normalized
-    per-category, weighted composite) — delegate research to researcher
-    agent, then implement
-  - Rationale: e.g. glm-5.3-flash may score well at low cost → high
-    overall value
-  - **Acceptance**: Credit usage researched and documented; per-test and
-    aggregate credit usage captured and persisted in saved results;
-    score-per-cost ranking in the report; formula choice documented with
-    reasoning
-
 - [ ] **P2.5.7: Design and create the improved hard suite** (Moderate-Complex)
   - Informed by `analysis/suite-research.md`; design doc at
     `analysis/suite-design.md`
@@ -322,6 +305,17 @@
 
 ### Phase 2.5: Core Quality (research deliverables)
 
+- [x] **P2.5.10: Ollama credit usage statistics + score-per-cost ranking** (2026-08-29)
+  - Implemented with the owner-approved backend-injection revision: no duplicated
+    HTTP transport — `create_backend(config)` once per run, injected into all
+    `yoker.agent()` calls, usage snapshots via `backend.fetch_usage()` (shared
+    edges, 3-None circuit breaker); `extract_usage_metrics` pure normalization;
+    per-test `usage_delta`/`requests_delta` + 6 optional `OverallSummary` fields;
+    `rank_composite` (quality × 1/(1 + sessionΔ/max(n_correct,1) × 1000)) with
+    composite-proximity ≈ tie flags, quality-only tie reorder, and Composite
+    column in the quality ranking. 415 tests, make check green. **Merged via PR #10** (squash a252a80)
+  - Note: `research/session-backend-usage.md` remains intentionally untracked
+    (workflow-local, like reporting/ artifacts)
 - [x] **P2.5.4: Research LLM evaluation frameworks** (2026-08-27)
   - Research for the improved hard suite completed. Full sourced report
     recovered from a lost session and archived at
